@@ -191,8 +191,9 @@ Note: legitimate installers may read some files. Keep an allowlist of expected p
 
 | Area | Choice | Notes |
 |---|---|---|
-| Language | Python 3.11+ | Whole orchestrator, parsers, rules, CLI |
+| Language | Python 3.11+ | Whole orchestrator, parsers, rules, CLI, and UI |
 | CLI | Typer + Rich | Colored terminal report |
+| GUI | Streamlit | Local scan form and interactive report viewer |
 | Containers | Docker (Docker SDK for Python) | Optional gVisor (`--runtime=runsc`) for benchmark |
 | Tracing | `strace -f -ttt -e trace=openat,execve,connect,sendto,unlinkat,rename` | Try without `CAP_SYS_PTRACE` first, add only if required and log it |
 | Gateway | mitmproxy (scripted) or small `aiohttp` proxy, + `dnsmasq` | Plain HTTP bodies fully visible; HTTPS = host/SNI only (see limits) |
@@ -445,6 +446,9 @@ safeinstall pip ./demo/sleepy-pkg --smoke sleepy_pkg --timeout 120
 safeinstall pip ./demo/sleepy-pkg --smoke sleepy_pkg --timeout 60
 safeinstall npm left-pad
 safeinstall pip requests --json  # machine-readable result
+
+# local GUI
+streamlit run safeinstall/ui.py
 
 # local demo sink
 python demo/sink/server.py --port 8080 --log /tmp/safeinstall-sink.jsonl
