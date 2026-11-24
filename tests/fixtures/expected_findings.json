@@ -1,0 +1,55 @@
+[
+  {
+    "rule_id": "DECOY_READ",
+    "severity": "critical",
+    "title": "Read decoy credential file",
+    "evidence": [
+      {"event_ref": 4, "summary": "python3 opened /home/sandbox/.env"},
+      {"event_ref": 5, "summary": "python3 opened /home/sandbox/.ssh/id_rsa"},
+      {"event_ref": 6, "summary": "python3 opened /home/sandbox/.aws/credentials"}
+    ]
+  },
+  {
+    "rule_id": "CANARY_EXFIL",
+    "severity": "critical",
+    "title": "Canary token observed in outbound request",
+    "evidence": [
+      {"event_ref": 13, "summary": "Raw canary token appeared in outbound request body"},
+      {"event_ref": 14, "summary": "Base64-encoded canary token appeared in outbound request body"}
+    ]
+  },
+  {
+    "rule_id": "UNKNOWN_NET",
+    "severity": "high",
+    "title": "Network activity outside registry allowlist",
+    "evidence": [
+      {"event_ref": 11, "summary": "python3 connected to 10.0.0.2:8080"},
+      {"event_ref": 12, "summary": "python3 queried collector.example"}
+    ]
+  },
+  {
+    "rule_id": "SUSPICIOUS_EXEC",
+    "severity": "medium",
+    "title": "Suspicious process execution",
+    "evidence": [
+      {"event_ref": 9, "summary": "python3 executed curl for an outbound POST"},
+      {"event_ref": 10, "summary": "python3 executed a shell command to read a decoy"}
+    ]
+  },
+  {
+    "rule_id": "OUTSIDE_WRITE",
+    "severity": "high",
+    "title": "Write outside permitted workspace",
+    "evidence": [
+      {"event_ref": 8, "summary": "python3 wrote /etc/cron.d/fixture"}
+    ]
+  },
+  {
+    "rule_id": "RESOURCE_ABUSE",
+    "severity": "medium",
+    "title": "Resource limit reached",
+    "evidence": [
+      {"event_ref": 18, "summary": "python3 reached the pids limit of 128"}
+    ]
+  }
+]

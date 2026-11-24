@@ -1,0 +1,1 @@
+"""Filesystem diff parser."""
