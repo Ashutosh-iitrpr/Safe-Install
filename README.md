@@ -67,9 +67,9 @@ All demo malware is **harmless by design**: it only touches our fake decoy files
 | Field | Value |
 |---|---|
 | **Current phase** | Phase 5: Report |
-| **Overall progress** | 26 / 38 tasks |
+| **Overall progress** | 29 / 38 tasks |
 | **Last updated** | 2026-11-24 |
-| **Next task** | T-027: Implement Rich terminal report |
+| **Next task** | T-030: npm path in entrypoint/orchestrator |
 | **Blockers** | None known |
 | **Environment confirmed?** | Yes (see Section 10) |
 | **Demo ready?** | No |
@@ -289,9 +289,9 @@ Legend: `[ ]` todo, `[x]` done, `[~]` in progress / partial, add a note after th
 - [x] **T-026** pytest coverage for parsers and rules using saved fixtures
 
 ### Phase 5: Report (hours 30 to 34)
-- [ ] **T-027** Rich terminal report: verdict banner, findings table, timeline
-- [ ] **T-028** HTML report (Jinja2): verdict, findings with evidence, event timeline, network summary
-- [ ] **T-029** Exit codes and `--json` output flag
+- [x] **T-027** Rich terminal report: verdict banner, findings table, timeline
+- [x] **T-028** HTML report (Jinja2): verdict, findings with evidence, event timeline, network summary
+- [x] **T-029** Exit codes and `--json` output flag
 
 ### Phase 6: npm support + demo packages (hours 34 to 42)
 - [ ] **T-030** npm path in entrypoint/orchestrator (`npm install`, then `require()` smoke test)
@@ -382,6 +382,9 @@ _Add new decisions below as D-007, D-008, ..._
 | 2026-11-24 | Implemented YAML-backed rules engine for decoy reads, canary exfiltration variants, unknown network, suspicious execution, outside writes, and resource abuse | Phase 4 in progress | T-025 |
 | 2026-11-24 | Tuned clean-package filtering; Requests, NumPy, Flask, Pillow, and Pandas runs remain green with no suspicious findings | Phase 4 in progress | T-026 |
 | 2026-11-24 | Expanded pytest parser/rules coverage with combined malicious and clean fixtures plus YAML severity consistency | Phase 5 in progress | T-027 |
+| 2026-11-24 | Added Rich terminal rendering for verdicts, findings, event timelines, and network summaries with clean-run coverage | Phase 5 in progress | T-028 |
+| 2026-11-24 | Added standalone Jinja2 HTML reports with escaped metadata, finding evidence, event timeline, and network summary | Phase 5 in progress | T-029 |
+| 2026-11-24 | Added stable CLI exit-code mapping and machine-readable `--json` run results for pip and npm commands | Phase 5 complete | T-030 |
 ---
 
 ## 13. Limitations (to be stated honestly in the final write-up)
@@ -428,7 +431,13 @@ pip install -e .
 safeinstall pip requests
 safeinstall pip ./demo/evil-pkg
 safeinstall npm left-pad
+safeinstall pip requests --json  # machine-readable result
 
 # tests
 pytest -q
 ```
+
+CLI exit codes are `0` for a clean run, `1` for warnings, timeouts, or sandbox
+failures, and `2` for a blocked verdict or startup error. The `--json` option
+prints the run ID, artifact directory, sandbox status, verdict, and CLI exit
+code without human-readable progress output.

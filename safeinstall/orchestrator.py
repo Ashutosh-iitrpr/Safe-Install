@@ -12,6 +12,7 @@ from typing import Any
 import docker
 
 from .config import SandboxLimits, gateway_environment, sandbox_container_kwargs
+from .contracts import Verdict
 
 
 @dataclass(frozen=True)
@@ -45,6 +46,7 @@ class RunResult:
     run_dir: Path
     exit_code: int
     timed_out: bool
+    verdict: Verdict | None = None
 
 
 class Orchestrator:

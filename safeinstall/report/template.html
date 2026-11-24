@@ -1,1 +1,100 @@
-<!-- HTML report template will be implemented in T-028. -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SafeInstall report - {{ run_id }}</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, sans-serif; }
+    body { background: #f5f7fb; color: #172033; margin: 0; }
+    main { margin: 2rem auto; max-width: 1100px; padding: 0 1rem; }
+    .verdict { border-left: .5rem solid; border-radius: .4rem; padding: 1rem 1.25rem; }
+    .verdict.block { background: #fee2e2; border-color: #b91c1c; }
+    .verdict.warning { background: #fef3c7; border-color: #b45309; }
+    .verdict.no_suspicious_behavior_observed { background: #dcfce7; border-color: #15803d; }
+    .verdict h1 { margin: 0; font-size: 1.4rem; }
+    section { background: white; border: 1px solid #dbe1ea; border-radius: .4rem; margin-top: 1rem; padding: 1rem; overflow-x: auto; }
+    h2 { margin-top: 0; font-size: 1.1rem; }
+    table { border-collapse: collapse; min-width: 100%; }
+    th, td { border-bottom: 1px solid #e5e7eb; padding: .55rem .6rem; text-align: left; vertical-align: top; }
+    th { background: #f8fafc; }
+    code { white-space: pre-wrap; overflow-wrap: anywhere; }
+    .critical { color: #b91c1c; font-weight: 700; }
+    .high { color: #c2410c; font-weight: 700; }
+    .medium { color: #a16207; font-weight: 700; }
+    .muted { color: #64748b; }
+    dl { display: grid; grid-template-columns: max-content 1fr; gap: .35rem 1rem; }
+    dt { font-weight: 700; }
+  </style>
+</head>
+<body>
+<main>
+  <header class="verdict {{ verdict_class }}">
+    <h1>SafeInstall verdict: {{ verdict }}</h1>
+    <p>{{ verdict_message }}</p>
+  </header>
+
+  <section>
+    <h2>Run metadata</h2>
+    <dl>
+      <dt>Run ID</dt><dd><code>{{ run_id }}</code></dd>
+      <dt>Input</dt><dd><code>{{ meta.input }}</code></dd>
+      <dt>Started</dt><dd>{{ meta.started_at }}</dd>
+      {% if meta.finished_at %}<dt>Finished</dt><dd>{{ meta.finished_at }}</dd>{% endif %}
+      {% if meta.exit_code is not none %}<dt>Exit code</dt><dd>{{ meta.exit_code }}</dd>{% endif %}
+    </dl>
+  </section>
+
+  <section>
+    <h2>Findings</h2>
+    {% if findings %}
+    <table>
+      <thead><tr><th>Severity</th><th>Rule</th><th>Title</th><th>Evidence</th></tr></thead>
+      <tbody>
+      {% for finding in findings %}
+        <tr>
+          <td class="{{ finding.severity }}">{{ finding.severity|upper }}</td>
+          <td><code>{{ finding.rule_id }}</code></td>
+          <td>{{ finding.title }}</td>
+          <td>
+            <ul>
+            {% for evidence in finding.evidence %}
+              <li>{{ evidence.summary }}
+                {% if evidence.event %}<span class="muted">(event {{ evidence.event.type }} at {{ evidence.event.ts }})</span>{% endif %}
+              </li>
+            {% endfor %}
+            </ul>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="muted">No findings.</p>{% endif %}
+  </section>
+
+  <section>
+    <h2>Event timeline</h2>
+    {% if events %}
+    <table>
+      <thead><tr><th>Time</th><th>Source</th><th>Process</th><th>Activity</th></tr></thead>
+      <tbody>
+      {% for event in events %}
+        <tr><td>{{ event.timestamp }}</td><td>{{ event.source }}</td><td>{{ event.process }}</td><td><code>{{ event.type }}: {{ event.summary }}</code></td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="muted">No events captured.</p>{% endif %}
+  </section>
+
+  <section>
+    <h2>Network summary</h2>
+    {% if hosts %}
+    <table>
+      <thead><tr><th>Host</th><th>Events</th></tr></thead>
+      <tbody>{% for host, count in hosts %}<tr><td><code>{{ host }}</code></td><td>{{ count }}</td></tr>{% endfor %}</tbody>
+    </table>
+    {% else %}<p class="muted">No network activity captured.</p>{% endif %}
+  </section>
+</main>
+</body>
+</html>

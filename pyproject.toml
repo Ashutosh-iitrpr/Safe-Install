@@ -23,5 +23,8 @@ safeinstall = "safeinstall.cli:app"
 [tool.setuptools.packages.find]
 include = ["safeinstall*"]
 
+[tool.setuptools.package-data]
+safeinstall = ["report/*.html"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
