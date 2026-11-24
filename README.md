@@ -47,6 +47,60 @@ It does not prove a package is safe. It flags suspicious behavior observed durin
 
 ---
 
+## Quick start
+
+### Requirements
+
+- Docker 29+ with the Docker daemon running
+- Python 3.12 or compatible supported Python
+- Linux, WSL2, or another Docker environment
+
+### Install
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --editable .
+```
+
+### Build
+
+```bash
+docker build -t safeinstall-sandbox:test ./safeinstall/sandbox
+docker build -t safeinstall-gateway:test ./safeinstall/gateway
+```
+
+### Scan packages
+
+```bash
+safeinstall pip requests --smoke requests --timeout 120
+safeinstall pip ./demo/evil-pkg --smoke evil_pkg --timeout 120
+safeinstall npm left-pad --smoke left-pad --timeout 120
+safeinstall pip requests --json
+```
+
+Each run creates `runs/<run-id>/` with `meta.json`, `strace.log`,
+`gateway.jsonl`, `fsdiff.txt`, `canaries.json`, `events.json`, `findings.json`,
+`report.json`, and `report.html`.
+
+Open the generated HTML report directly in a browser, or launch the local
+report viewer:
+
+```bash
+streamlit run safeinstall/ui.py
+```
+
+Run the automated tests:
+
+```bash
+pytest -q
+```
+
+More detail is available in [Limitations](docs/limitations.md) and
+[Benchmarks](docs/benchmarks.md).
+
+---
+
 ## 2. Demo (the thing we must be able to show)
 
 1. **Clean package** (`demo/clean-pkg`): green verdict, small event list.
@@ -67,12 +121,12 @@ All demo malware is **harmless by design**: it only touches our fake decoy files
 | Field | Value |
 |---|---|
 | **Current phase** | Phase 5: Report |
-| **Overall progress** | 34 / 38 tasks |
+| **Overall progress** | 36 / 38 tasks |
 | **Last updated** | 2026-11-24 |
-| **Next task** | T-034: Optional GitHub repository input |
+| **Next task** | T-037: Rehearse the end-to-end demo |
 | **Blockers** | None known |
 | **Environment confirmed?** | Yes (see Section 10) |
-| **Demo ready?** | No |
+| **Demo ready?** | Yes for clean, evil, and sleepy local fixtures |
 
 ---
 
@@ -302,10 +356,10 @@ Legend: `[ ]` todo, `[x]` done, `[~]` in progress / partial, add a note after th
 - [ ] **T-034** (Optional) GitHub repo input: clone inside sandbox, detect `requirements.txt`/`package.json`/`setup.py`
 
 ### Phase 7: Polish, docs, rehearsal (hours 42 to 48)
-- [ ] **T-035** Write `docs/limitations.md` (evasions: sandbox detection, time bombs, env-specific triggers, HTTPS body blind spot)
-- [ ] **T-036** (Stretch) gVisor vs runc benchmark table in `docs/benchmarks.md`
+- [x] **T-035** Write `docs/limitations.md` (evasions: sandbox detection, time bombs, env-specific triggers, HTTPS body blind spot)
+- [~] **T-036** (Stretch) gVisor vs runc benchmark table in `docs/benchmarks.md`; benchmark plan documented, measurements not collected
 - [ ] **T-037** Record the demo end to end 2 times; write a 60-second demo script in Section 14
-- [ ] **T-038** Final README pass (install, usage, screenshots), resume bullets finalized in Section 15
+- [x] **T-038** Final README pass (install, usage, demo/limitations links), resume bullets finalized in Section 15
 
 ---
 
@@ -381,6 +435,7 @@ _Add new decisions below as D-007, D-008, ..._
 | 2026-11-24 | Implemented and smoke-tested the Docker run orchestrator with run directories, internal/gateway topology, timeout, metadata, container logs, fsdiff, and guaranteed cleanup | Phase 3 in progress | T-019 |
 | 2026-11-24 | Added Typer `pip` and `npm` CLI commands, tested command parsing and real local pip execution through the orchestrator | Phase 3 in progress | T-020 |
 | 2026-11-24 | Added Docker diff normalization and live peak-memory sampling, persisted in `fsdiff.txt` and `meta.json` | Phase 3 complete | T-021 |
+| 2026-11-24 | Completed limitations, quick-start usage, demo script, resume bullets, and benchmark-plan documentation; stretch benchmark and recorded rehearsal remain incomplete | Phase 7 in progress | T-037 |
 | 2026-11-24 | Fixed NumPy native-extension imports by changing `/tmp` from `noexec` to explicit `exec,nosuid,nodev`; NumPy 2.4.6 installed and imported successfully | Phase 3 complete | T-021 |
 | 2026-11-24 | Implemented strace normalization for exec, file read/write, and network connects; filtered system noise and retained failed connect evidence | Phase 4 in progress | T-022 |
 | 2026-11-24 | Implemented gateway JSONL parsing for DNS, HTTP, and CONNECT records; malformed lines are skipped | Phase 4 in progress | T-023 |
@@ -414,20 +469,32 @@ _Add new decisions below as D-007, D-008, ..._
 
 _Target: 60 to 90 seconds._
 
-1. Show the problem in one sentence.
-2. Run `safeinstall pip demo-clean`, then show the green report.
-3. Run `safeinstall pip demo-evil`, then show the red report: decoy read, outbound POST, canary confirmed.
-4. Open the HTML report, show the timeline.
-5. Mention limitations and the gVisor benchmark.
+1. State that install scripts can execute arbitrary code before a package is used.
+2. Start the local sink in one terminal:
+   `python demo/sink/server.py --port 8080 --log /tmp/safeinstall-sink.jsonl`
+3. Run the clean demo:
+   `safeinstall pip ./demo/clean-pkg --smoke clean_pkg --timeout 120`
+4. Open `runs/<run-id>/report.html` and show the green verdict and small timeline.
+5. Run the evil demo:
+   `safeinstall pip ./demo/evil-pkg --smoke evil_pkg --timeout 120`
+6. Show the BLOCK verdict, decoy read, unknown host, and base64 canary evidence.
+7. Optionally demonstrate delayed behavior:
+   `safeinstall pip ./demo/sleepy-pkg --smoke sleepy_pkg --timeout 120`
+8. Discuss the 60-second miss case, HTTPS blind spot, sandbox detection, and
+   container isolation limits.
+
+The demo packages touch only generated decoy credentials and connect only to
+the controlled `collector.example` sinkhole host. They contain no real secrets
+and no real malware.
 
 ---
 
 ## 15. Resume / Presentation Bullets (finalize in T-038)
 
-Draft:
-- Built **SafeInstall**, a dynamic-analysis sandbox that detects credential theft and suspicious network activity in `pip`/`npm` installs using container isolation (namespaces, cgroups, seccomp), syscall tracing, and canary-token exfiltration detection.
-- Designed a network-jailed gateway (allowlisted registry proxy + sinkhole + DNS logging) enabling safe observation of malicious behavior without real data leaving the host.
-- (If done) Benchmarked runc vs gVisor isolation overhead and documented the security/performance trade-offs.
+- Built **SafeInstall**, a pre-install dynamic-analysis sandbox that detects decoy credential reads, canary exfiltration, suspicious execution, and unknown network activity in `pip`/`npm` packages.
+- Implemented Docker namespace, cgroup, read-only-rootfs, capability-drop, and network-isolation controls plus syscall tracing and decoy canary credentials.
+- Built a registry allowlist gateway and sinkhole that enables package installs while safely observing and logging unknown outbound requests and DNS activity.
+- Produced Rich terminal, HTML, and JSON reports from normalized strace, gateway, and filesystem-diff events.
 
 ---
 
@@ -437,6 +504,10 @@ Draft:
 # setup
 python -m venv .venv && source .venv/bin/activate
 pip install -e .
+
+# build images
+docker build -t safeinstall-sandbox:test ./safeinstall/sandbox
+docker build -t safeinstall-gateway:test ./safeinstall/gateway
 
 # run
 safeinstall pip requests
