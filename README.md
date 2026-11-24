@@ -66,10 +66,10 @@ All demo malware is **harmless by design**: it only touches our fake decoy files
 
 | Field | Value |
 |---|---|
-| **Current phase** | Phase 3: Orchestrator + CLI end to end |
-| **Overall progress** | 20 / 38 tasks |
+| **Current phase** | Phase 5: Report |
+| **Overall progress** | 26 / 38 tasks |
 | **Last updated** | 2026-11-24 |
-| **Next task** | T-021: Implement strace parser |
+| **Next task** | T-027: Implement Rich terminal report |
 | **Blockers** | None known |
 | **Environment confirmed?** | Yes (see Section 10) |
 | **Demo ready?** | No |
@@ -281,12 +281,12 @@ Legend: `[ ]` todo, `[x]` done, `[~]` in progress / partial, add a note after th
 - [x] **T-020** Capture `docker diff` and peak memory/exit code into `meta.json` / `fsdiff.txt`
 
 ### Phase 4: Parsers + rules engine (hours 22 to 30)
-- [ ] **T-021** `strace_parser.py` to events (file_read, exec, net_connect); filter system noise
-- [ ] **T-022** `gateway_parser.py` to events (dns, http_request with body excerpt)
-- [ ] **T-023** `fsdiff_parser.py` to file_write events
-- [ ] **T-024** Rules engine reading `rules.yaml`; implement DECOY_READ, CANARY_EXFIL (raw/base64/hex/urlencoded), UNKNOWN_NET, SUSPICIOUS_EXEC, OUTSIDE_WRITE, RESOURCE_ABUSE
-- [ ] **T-025** Tune allowlists so `clean-pkg` and 2 to 3 popular real packages (e.g. `requests`, `numpy`) stay green
-- [ ] **T-026** pytest coverage for parsers and rules using saved fixtures
+- [x] **T-021** `strace_parser.py` to events (file_read, exec, net_connect); filter system noise
+- [x] **T-022** `gateway_parser.py` to events (dns, http_request with body excerpt)
+- [x] **T-023** `fsdiff_parser.py` to file_write events
+- [x] **T-024** Rules engine reading `rules.yaml`; implement DECOY_READ, CANARY_EXFIL (raw/base64/hex/urlencoded), UNKNOWN_NET, SUSPICIOUS_EXEC, OUTSIDE_WRITE, RESOURCE_ABUSE
+- [x] **T-025** Tune allowlists so `clean-pkg` and 2 to 3 popular real packages (e.g. `requests`, `numpy`) stay green
+- [x] **T-026** pytest coverage for parsers and rules using saved fixtures
 
 ### Phase 5: Report (hours 30 to 34)
 - [ ] **T-027** Rich terminal report: verdict banner, findings table, timeline
@@ -376,6 +376,12 @@ _Add new decisions below as D-007, D-008, ..._
 | 2026-11-24 | Added Typer `pip` and `npm` CLI commands, tested command parsing and real local pip execution through the orchestrator | Phase 3 in progress | T-020 |
 | 2026-11-24 | Added Docker diff normalization and live peak-memory sampling, persisted in `fsdiff.txt` and `meta.json` | Phase 3 complete | T-021 |
 | 2026-11-24 | Fixed NumPy native-extension imports by changing `/tmp` from `noexec` to explicit `exec,nosuid,nodev`; NumPy 2.4.6 installed and imported successfully | Phase 3 complete | T-021 |
+| 2026-11-24 | Implemented strace normalization for exec, file read/write, and network connects; filtered system noise and retained failed connect evidence | Phase 4 in progress | T-022 |
+| 2026-11-24 | Implemented gateway JSONL parsing for DNS, HTTP, and CONNECT records; malformed lines are skipped | Phase 4 in progress | T-023 |
+| 2026-11-24 | Implemented Docker fsdiff parsing for added, changed, and deleted paths | Phase 4 in progress | T-024 |
+| 2026-11-24 | Implemented YAML-backed rules engine for decoy reads, canary exfiltration variants, unknown network, suspicious execution, outside writes, and resource abuse | Phase 4 in progress | T-025 |
+| 2026-11-24 | Tuned clean-package filtering; Requests, NumPy, Flask, Pillow, and Pandas runs remain green with no suspicious findings | Phase 4 in progress | T-026 |
+| 2026-11-24 | Expanded pytest parser/rules coverage with combined malicious and clean fixtures plus YAML severity consistency | Phase 5 in progress | T-027 |
 ---
 
 ## 13. Limitations (to be stated honestly in the final write-up)

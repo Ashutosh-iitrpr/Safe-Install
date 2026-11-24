@@ -38,7 +38,7 @@
   },
   {
     "rule_id": "OUTSIDE_WRITE",
-    "severity": "high",
+    "severity": "medium",
     "title": "Write outside permitted workspace",
     "evidence": [
       {"event_ref": 8, "summary": "python3 wrote /etc/cron.d/fixture"}

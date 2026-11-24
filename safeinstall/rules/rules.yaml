@@ -1,1 +1,24 @@
-# Rules will be defined in T-024.
+registry_allowlist:
+  - pypi.org
+  - files.pythonhosted.org
+  - registry.npmjs.org
+
+rules:
+  DECOY_READ:
+    severity: critical
+    title: Read decoy credential file
+  CANARY_EXFIL:
+    severity: critical
+    title: Canary token observed in outbound request
+  UNKNOWN_NET:
+    severity: high
+    title: Network activity outside registry allowlist
+  SUSPICIOUS_EXEC:
+    severity: medium
+    title: Suspicious process execution
+  OUTSIDE_WRITE:
+    severity: medium
+    title: Write outside permitted workspace
+  RESOURCE_ABUSE:
+    severity: medium
+    title: Resource limit reached
