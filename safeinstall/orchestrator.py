@@ -13,6 +13,7 @@ import docker
 
 from .config import SandboxLimits, gateway_environment, sandbox_container_kwargs
 from .contracts import Verdict
+from .analyzer import analyze_run
 
 
 @dataclass(frozen=True)
@@ -264,12 +265,14 @@ class Orchestrator:
                 "peak_mem": locals().get("peak_mem"),
             },
         )
+        artifacts = analyze_run(run_dir, run_id)
 
         return RunResult(
             run_id=run_id,
             run_dir=run_dir,
             exit_code=exit_code,
             timed_out=timed_out,
+            verdict=artifacts.verdict,
         )
 
     def _docker_diff(self, sandbox: Any) -> str:

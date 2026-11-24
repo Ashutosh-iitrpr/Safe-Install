@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "safeinstall-sleepy-pkg"
+version = "0.1.0"
+description = "Delayed, harmless SafeInstall observation-window demonstration"
+requires-python = ">=3.9"
+
+[tool.setuptools.packages.find]
+include = ["sleepy_pkg*"]

@@ -8,6 +8,7 @@ import typer
 from .config import SandboxLimits
 from .contracts import Verdict
 from .orchestrator import Orchestrator, RunResult
+from .report.render import render_terminal
 
 
 app = typer.Typer(
@@ -77,6 +78,14 @@ def _run(
         typer.echo(_json_result(result, code))
     else:
         typer.echo(f"Run artifacts: {result.run_dir}")
+        report_path = result.run_dir / "report.json"
+        if report_path.exists():
+            from .contracts import RunArtifacts
+
+            artifacts = RunArtifacts.model_validate_json(
+                report_path.read_text(encoding="utf-8")
+            )
+            render_terminal(artifacts)
     if result.timed_out and not json_output:
         typer.echo("Observation window timed out.", err=True)
     elif result.exit_code != 0 and not json_output:

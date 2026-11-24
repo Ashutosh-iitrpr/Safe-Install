@@ -124,7 +124,8 @@ else
     module_name=$(npm_module_name)
     strace -f -ttt -o "$SMOKE_TRACE" $TRACE_FILTER \
         timeout --foreground "$smoke_phase_seconds" sh -c \
-        'cd "$1" && node -e "require(process.argv[1])"' sh "$WORK_DIR/npm" "$module_name"
+        'cd "$1" && node -e "require(process.argv[1])" "$2"' \
+        sh "$WORK_DIR/npm" "$module_name"
 fi
 smoke_status=$?
 cat "$SMOKE_TRACE" >> "$STRACE_LOG"

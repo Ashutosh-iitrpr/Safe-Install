@@ -67,9 +67,9 @@ All demo malware is **harmless by design**: it only touches our fake decoy files
 | Field | Value |
 |---|---|
 | **Current phase** | Phase 5: Report |
-| **Overall progress** | 29 / 38 tasks |
+| **Overall progress** | 34 / 38 tasks |
 | **Last updated** | 2026-11-24 |
-| **Next task** | T-030: npm path in entrypoint/orchestrator |
+| **Next task** | T-034: Optional GitHub repository input |
 | **Blockers** | None known |
 | **Environment confirmed?** | Yes (see Section 10) |
 | **Demo ready?** | No |
@@ -294,10 +294,10 @@ Legend: `[ ]` todo, `[x]` done, `[~]` in progress / partial, add a note after th
 - [x] **T-029** Exit codes and `--json` output flag
 
 ### Phase 6: npm support + demo packages (hours 34 to 42)
-- [ ] **T-030** npm path in entrypoint/orchestrator (`npm install`, then `require()` smoke test)
-- [ ] **T-031** Write `demo/sink/` (tiny HTTP server logging POST bodies) and `demo/clean-pkg`
-- [ ] **T-032** Write `demo/evil-pkg` (reads decoys, base64, POSTs to external IP/host) and make the verdict BLOCK reliably
-- [ ] **T-033** Write `demo/sleepy-pkg` (delayed trigger) and decide observation window; document result honestly
+- [x] **T-030** npm path in entrypoint/orchestrator (`npm install`, then `require()` smoke test)
+- [x] **T-031** Write `demo/sink/` (tiny HTTP server logging POST bodies) and `demo/clean-pkg`
+- [x] **T-032** Write `demo/evil-pkg` (reads decoys, base64, POSTs to external IP/host) and make the verdict BLOCK reliably
+- [x] **T-033** Write `demo/sleepy-pkg` (delayed trigger) and decide observation window; document result honestly
 - [ ] **T-034** (Optional) GitHub repo input: clone inside sandbox, detect `requirements.txt`/`package.json`/`setup.py`
 
 ### Phase 7: Polish, docs, rehearsal (hours 42 to 48)
@@ -317,6 +317,11 @@ Legend: `[ ]` todo, `[x]` done, `[~]` in progress / partial, add a note after th
 - HTTPS to non-allowlisted hosts: we can only see the CONNECT host/SNI unless we MITM. Demo exfil uses plain HTTP to a sink. Treat HTTPS body inspection as a documented limitation or stretch.
 - Always `docker rm -f` containers and remove the network in a `finally` block. Leaked networks will break later runs.
 - Keep each run under a hard wall-clock timeout (e.g. 120 s) so demos never hang.
+- The sleepy demo waits 45 seconds during import before posting its marker. Because
+  the timeout is split evenly between install and smoke phases, `--timeout 120`
+  gives it a 60-second smoke window and catches the trigger, while `--timeout 60`
+  gives it only 30 seconds and misses it. A missed trigger is an observation
+  limitation, not evidence that the package is clean.
 - Pin exact package versions for the demo packages so results are reproducible.
 - If `strace` fails with `ptrace: Operation not permitted`, see Section 6 note; log whichever fix you apply as a decision.
 
@@ -385,6 +390,11 @@ _Add new decisions below as D-007, D-008, ..._
 | 2026-11-24 | Added Rich terminal rendering for verdicts, findings, event timelines, and network summaries with clean-run coverage | Phase 5 in progress | T-028 |
 | 2026-11-24 | Added standalone Jinja2 HTML reports with escaped metadata, finding evidence, event timeline, and network summary | Phase 5 in progress | T-029 |
 | 2026-11-24 | Added stable CLI exit-code mapping and machine-readable `--json` run results for pip and npm commands | Phase 5 complete | T-030 |
+| 2026-11-24 | Fixed npm require smoke-test argument forwarding and added shell regression coverage | Phase 6 in progress | T-031 |
+| 2026-11-24 | Added harmless demo HTTP sink with JSONL POST logging and a side-effect-free local clean package | Phase 6 in progress | T-032 |
+| 2026-11-24 | Added controlled evil demo package that reads only generated decoys, base64-encodes them, and posts to the sinkhole host | Phase 6 in progress | T-033 |
+| 2026-11-24 | Added delayed sleepy demo with a 45-second trigger and documented 120-second catch versus 60-second miss observation windows | Phase 6 in progress | T-034 |
+| 2026-11-24 | Connected completed runs to parsers, rules, JSON/HTML reports, and CLI verdicts; automatic analysis now persists events, findings, and report artifacts | Phase 6 in progress | T-034 |
 ---
 
 ## 13. Limitations (to be stated honestly in the final write-up)
@@ -429,9 +439,15 @@ pip install -e .
 
 # run
 safeinstall pip requests
+safeinstall pip ./demo/clean-pkg --smoke clean_pkg
 safeinstall pip ./demo/evil-pkg
+safeinstall pip ./demo/sleepy-pkg --smoke sleepy_pkg --timeout 120
+safeinstall pip ./demo/sleepy-pkg --smoke sleepy_pkg --timeout 60
 safeinstall npm left-pad
 safeinstall pip requests --json  # machine-readable result
+
+# local demo sink
+python demo/sink/server.py --port 8080 --log /tmp/safeinstall-sink.jsonl
 
 # tests
 pytest -q
@@ -441,3 +457,7 @@ CLI exit codes are `0` for a clean run, `1` for warnings, timeouts, or sandbox
 failures, and `2` for a blocked verdict or startup error. The `--json` option
 prints the run ID, artifact directory, sandbox status, verdict, and CLI exit
 code without human-readable progress output.
+
+The sleepy demo intentionally illustrates the observation-window boundary:
+the 120-second run should reach its delayed marker, while the 60-second run
+should time out during import before the marker fires.
