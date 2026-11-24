@@ -9,6 +9,7 @@ from safeinstall.orchestrator import NetworkTopology, Orchestrator
 class FakeContainer:
     def __init__(self) -> None:
         self.removed = False
+        self.reloaded = False
         self.attrs = {
             "NetworkSettings": {
                 "Networks": {
@@ -20,11 +21,17 @@ class FakeContainer:
     def wait(self, timeout: int) -> dict[str, int]:
         return {"StatusCode": 0}
 
+    def reload(self) -> None:
+        self.reloaded = True
+
     def stats(self, stream: bool) -> dict[str, object]:
-        return {"memory_stats": {"usage": 1234}}
+        return {"memory_stats": {"usage": 1234, "max_usage": 2345}}
 
     def diff(self) -> list[dict[str, object]]:
-        return [{"Kind": "A", "Path": "/work/test"}]
+        return [{"Kind": 1, "Path": "/work/test"}]
+
+    def logs(self) -> bytes:
+        return b"fake logs"
 
     def remove(self, force: bool) -> None:
         self.removed = True
@@ -93,5 +100,8 @@ def test_orchestrator_creates_meta_and_cleans_up() -> None:
         assert result.exit_code == 0
         assert (result.run_dir / "meta.json").exists()
         assert (result.run_dir / "fsdiff.txt").read_text() == "A /work/test\n"
+        meta = __import__("json").loads((result.run_dir / "meta.json").read_text())
+        assert meta["peak_mem"] == 2345
+        assert meta["exit_code"] == 0
         assert client.networks.network.removed is True
         assert all(container.removed for container in client.containers.items)

@@ -19,7 +19,7 @@ def test_hardened_sandbox_options() -> None:
     assert kwargs["read_only"] is True
     assert kwargs["tmpfs"] == {
         "/work": "rw,nosuid,nodev,size=1g",
-        "/tmp": "rw,nosuid,nodev,size=512m",
+        "/tmp": "rw,exec,nosuid,nodev,size=512m",
         "/home/sandbox": "rw,nosuid,nodev,uid=1000,gid=1000,mode=0700,size=64m",
     }
     assert kwargs["cap_drop"] == ["ALL"]

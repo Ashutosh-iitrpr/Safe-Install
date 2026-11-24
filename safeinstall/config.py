@@ -29,7 +29,7 @@ class SandboxHardening:
                 "tmpfs",
                 {
                     "/work": "rw,nosuid,nodev,size=1g",
-                    "/tmp": "rw,nosuid,nodev,size=512m",
+                    "/tmp": "rw,exec,nosuid,nodev,size=512m",
                     "/home/sandbox": "rw,nosuid,nodev,uid=1000,gid=1000,mode=0700,size=64m",
                 },
             )

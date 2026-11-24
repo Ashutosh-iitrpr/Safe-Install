@@ -3,6 +3,7 @@
 import json
 import secrets
 import time
+import threading
 from datetime import datetime, timezone
 from dataclasses import dataclass
 from pathlib import Path
@@ -128,14 +129,9 @@ class Orchestrator:
                 volumes={str(run_dir): {"bind": "/work", "mode": "rw"}},
             )
             network.connect(gateway)
-
-            gateway_networks = gateway.attrs["NetworkSettings"]["Networks"]
-            gateway_ip = gateway_networks.get(topology.internal_name)
-            if gateway_ip:
-                gateway_ip = gateway_ip["IPAddress"]
-            else:
-                gateway_ip = next(iter(gateway_networks.values()))["IPAddress"]
-            environment = gateway_environment(f"http://{gateway_ip}:3128")
+            gateway.reload()
+            gateway_proxy_url = f"http://{topology.gateway_name}:3128"
+            environment = gateway_environment(gateway_proxy_url)
 
             sandbox_kwargs = sandbox_container_kwargs(self.sandbox_image, limits)
             sandbox_kwargs["read_only"] = True
@@ -149,7 +145,7 @@ class Orchestrator:
             sandbox_kwargs["network"] = topology.internal_name
             sandbox_kwargs["environment"] = {
                 **environment,
-                "SAFEINSTALL_PROXY_URL": f"http://{gateway_ip}:3128",
+                "SAFEINSTALL_PROXY_URL": gateway_proxy_url,
                 "SAFEINSTALL_TIMEOUT": str(limits.timeout_seconds),
             }
             sandbox_kwargs["volumes"] = {str(run_dir): {"bind": "/work", "mode": "rw"}}
@@ -175,6 +171,30 @@ class Orchestrator:
 
             sandbox = self.client.containers.run(**sandbox_kwargs)
             started = time.monotonic()
+            stop_stats = threading.Event()
+            peak_mem_state = {"value": None}
+
+            def sample_peak_memory() -> None:
+                while not stop_stats.is_set():
+                    try:
+                        stats = sandbox.stats(stream=False)
+                        memory = stats.get("memory_stats", {})
+                        usage = memory.get("max_usage") or memory.get("usage")
+                        if usage is not None:
+                            usage = int(usage)
+                            current = peak_mem_state["value"]
+                            if current is None or usage > current:
+                                peak_mem_state["value"] = usage
+                    except Exception:
+                        pass
+                    stop_stats.wait(0.1)
+
+            stats_thread = threading.Thread(
+                target=sample_peak_memory,
+                name=f"safeinstall-stats-{run_id}",
+                daemon=True,
+            )
+            stats_thread.start()
             try:
                 wait_result = sandbox.wait(timeout=limits.timeout_seconds)
                 exit_code = int(wait_result.get("StatusCode", 1))
@@ -184,6 +204,9 @@ class Orchestrator:
                 timed_out = True
                 sandbox.kill()
                 exit_code = 124
+            finally:
+                stop_stats.set()
+                stats_thread.join(timeout=1)
 
             elapsed = time.monotonic() - started
             if elapsed >= limits.timeout_seconds:
@@ -198,11 +221,7 @@ class Orchestrator:
             except Exception:
                 pass
 
-            try:
-                stats = sandbox.stats(stream=False)
-                peak_mem = int(stats["memory_stats"].get("usage", 0))
-            except Exception:
-                peak_mem = None
+            peak_mem = peak_mem_state["value"]
 
             (run_dir / "fsdiff.txt").write_text(
                 self._docker_diff(sandbox),
@@ -254,8 +273,9 @@ class Orchestrator:
     def _docker_diff(self, sandbox: Any) -> str:
         try:
             changes = sandbox.diff()
+            kind_names = {0: "C", 1: "A", 2: "D"}
             return "\n".join(
-                f"{change['Kind']} {change['Path']}"
+                f"{kind_names.get(change['Kind'], str(change['Kind']))} {change['Path']}"
                 for change in changes
             ) + ("\n" if changes else "")
         except Exception:

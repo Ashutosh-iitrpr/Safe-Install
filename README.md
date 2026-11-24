@@ -66,10 +66,10 @@ All demo malware is **harmless by design**: it only touches our fake decoy files
 
 | Field | Value |
 |---|---|
-| **Current phase** | Phase 1: Sandbox core |
-| **Overall progress** | 17 / 38 tasks |
-| **Last updated** | 2026-11-23 |
-| **Next task** | T-019: Add the CLI end-to-end |
+| **Current phase** | Phase 3: Orchestrator + CLI end to end |
+| **Overall progress** | 20 / 38 tasks |
+| **Last updated** | 2026-11-24 |
+| **Next task** | T-021: Implement strace parser |
 | **Blockers** | None known |
 | **Environment confirmed?** | Yes (see Section 10) |
 | **Demo ready?** | No |
@@ -263,7 +263,7 @@ Legend: `[ ]` todo, `[x]` done, `[~]` in progress / partial, add a note after th
 - [x] **T-006** Build sandbox image (python, node/npm, strace, non-root user `sandbox`)
 - [x] **T-007** Write `make_decoys.py`: generate fake `~/.ssh/id_rsa`, `.env`, `~/.aws/credentials`, each with unique canary token; write `canaries.json`
 - [x] **T-008** Write `entrypoint.sh`: phase A install under strace, phase B import/smoke test under strace, honor timeout
-- [x] **T-009** Container hardening flags: read-only rootfs, tmpfs `/work` and `/tmp`, `--cap-drop ALL`, `--security-opt no-new-privileges`, memory/cpu/pids limits
+- [x] **T-009** Container hardening flags: read-only rootfs, tmpfs `/work` and `/tmp` (tmpfs `/tmp` permits exec for native extensions), `--cap-drop ALL`, `--security-opt no-new-privileges`, memory/cpu/pids limits
 - [x] **T-010** Manually run a clean pip package in the sandbox with no network; confirm `strace.log` is produced
 - [x] **T-011** Check installs work with read-only rootfs (use venv/`--target` in tmpfs); fix as needed
 
@@ -277,8 +277,8 @@ Legend: `[ ]` todo, `[x]` done, `[~]` in progress / partial, add a note after th
 
 ### Phase 3: Orchestrator + CLI end to end (hours 16 to 22)
 - [x] **T-018** Orchestrator: create run dir, start gateway + sandbox, wait/timeout, collect artifacts, teardown (always clean up containers/networks even on failure)
-- [ ] **T-019** CLI: `safeinstall pip <name>[==ver]` end to end, producing artifacts
-- [ ] **T-020** Capture `docker diff` and peak memory/exit code into `meta.json` / `fsdiff.txt`
+- [x] **T-019** CLI: `safeinstall pip <name>[==ver]` end to end, producing artifacts
+- [x] **T-020** Capture `docker diff` and peak memory/exit code into `meta.json` / `fsdiff.txt`
 
 ### Phase 4: Parsers + rules engine (hours 22 to 30)
 - [ ] **T-021** `strace_parser.py` to events (file_read, exec, net_connect); filter system noise
@@ -347,6 +347,8 @@ Legend: `[ ]` todo, `[x]` done, `[~]` in progress / partial, add a note after th
 | D-007 | 2026-11-23 | strace runs in container WITHOUT CAP_SYS_PTRACE | Verified on Docker 29.10.0 / WSL2 as root; re-verify when non-root hardened |
 _Add new decisions below as D-007, D-008, ..._
 
+| D-008 | 2026-11-24 | Mount `/tmp` as `exec,nosuid,nodev` for package virtual environments | Native shared libraries in NumPy `.so` files require executable mapping; `noexec` tmpfs caused import failure |
+
 ---
 
 ## 12. Session Log (append newest at the bottom)
@@ -371,6 +373,9 @@ _Add new decisions below as D-007, D-008, ..._
 | 2026-11-23 | Added shared pip/npm/HTTP proxy environment configuration and verified sandbox-to-gateway routing over the internal Docker network | Phase 2 in progress | T-017 |
 | 2026-11-23 | Verified a raw socket to 1.1.1.1:80 fails with ENETUNREACH in the internal network and is captured by strace | Phase 2 complete | T-018 |
 | 2026-11-24 | Implemented and smoke-tested the Docker run orchestrator with run directories, internal/gateway topology, timeout, metadata, container logs, fsdiff, and guaranteed cleanup | Phase 3 in progress | T-019 |
+| 2026-11-24 | Added Typer `pip` and `npm` CLI commands, tested command parsing and real local pip execution through the orchestrator | Phase 3 in progress | T-020 |
+| 2026-11-24 | Added Docker diff normalization and live peak-memory sampling, persisted in `fsdiff.txt` and `meta.json` | Phase 3 complete | T-021 |
+| 2026-11-24 | Fixed NumPy native-extension imports by changing `/tmp` from `noexec` to explicit `exec,nosuid,nodev`; NumPy 2.4.6 installed and imported successfully | Phase 3 complete | T-021 |
 ---
 
 ## 13. Limitations (to be stated honestly in the final write-up)
