@@ -23,15 +23,14 @@ def cli_exit_code(
     sandbox_exit_code: int = 0,
     timed_out: bool = False,
 ) -> int:
-    """Map a run result to the stable SafeInstall CLI exit-code contract."""
-    if timed_out or sandbox_exit_code != 0:
-        return 1
+    """0 clean, 1 warning, 2 block, 3 inconclusive/error."""
     if verdict is Verdict.BLOCK:
         return 2
     if verdict is Verdict.WARNING:
         return 1
+    if verdict is Verdict.INCONCLUSIVE or timed_out or sandbox_exit_code != 0:
+        return 3
     return 0
-
 
 def _json_result(result: RunResult, cli_code: int) -> str:
     return json.dumps(
@@ -53,6 +52,7 @@ def _run(
     smoke: str | None,
     timeout: int,
     json_output: bool = False,
+    show_timeline: bool = True,
 ) -> None:
     if timeout < 1:
         raise typer.BadParameter("timeout must be at least 1 second")
@@ -68,10 +68,10 @@ def _run(
         )
     except Exception as exc:
         if json_output:
-            typer.echo(json.dumps({"error": str(exc), "exit_code": 2}, sort_keys=True))
+            typer.echo(json.dumps({"error": str(exc), "exit_code": 3}, sort_keys=True))
         else:
             typer.echo(f"SafeInstall could not start the run: {exc}", err=True)
-        raise typer.Exit(code=2) from exc
+        raise typer.Exit(code=3) from exc
 
     code = cli_exit_code(result.verdict, result.exit_code, result.timed_out)
     if json_output:
@@ -85,11 +85,15 @@ def _run(
             artifacts = RunArtifacts.model_validate_json(
                 report_path.read_text(encoding="utf-8")
             )
-            render_terminal(artifacts)
+            render_terminal(artifacts, show_timeline=show_timeline)
     if result.timed_out and not json_output:
         typer.echo("Observation window timed out.", err=True)
     elif result.exit_code != 0 and not json_output:
         typer.echo(f"Sandbox process exited with code {result.exit_code}.", err=True)
+    
+    error_file = result.run_dir / "orchestrator-error.txt"
+    if error_file.exists() and not json_output:
+        typer.echo(f"SafeInstall run error: {error_file.read_text(encoding='utf-8')}", err=True)
     if code:
         raise typer.Exit(code=code)
 
@@ -100,9 +104,10 @@ def pip_command(
     smoke: str | None = typer.Option(None, "--smoke", help="Python module for the import smoke test"),
     timeout: int = typer.Option(120, "--timeout", min=1, help="Maximum observation seconds"),
     json_output: bool = typer.Option(False, "--json", help="Print the result as JSON"),
+    no_timeline: bool = typer.Option(False, "--no-timeline", help="Hide the event timeline in the terminal report"),
 ) -> None:
     """Run a pip package in the SafeInstall sandbox."""
-    _run("pip", target, smoke, timeout, json_output)
+    _run("pip", target, smoke, timeout, json_output, not no_timeline)
 
 
 @app.command("npm")
@@ -111,6 +116,7 @@ def npm_command(
     smoke: str | None = typer.Option(None, "--smoke", help="Node module for the require smoke test"),
     timeout: int = typer.Option(120, "--timeout", min=1, help="Maximum observation seconds"),
     json_output: bool = typer.Option(False, "--json", help="Print the result as JSON"),
+    no_timeline: bool = typer.Option(False, "--no-timeline", help="Hide the event timeline in the terminal report"),
 ) -> None:
     """Run an npm package in the SafeInstall sandbox."""
-    _run("npm", target, smoke, timeout, json_output)
+    _run("npm", target, smoke, timeout, json_output, not no_timeline)

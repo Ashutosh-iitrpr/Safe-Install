@@ -73,7 +73,7 @@ if [ -n "$PROXY_URL" ]; then
     export no_proxy="${no_proxy:-127.0.0.1,localhost}"
 fi
 
-TRACE_FILTER="-e trace=openat,execve,connect,sendto,unlinkat,rename"
+TRACE_FILTER="-s 4096 -e trace=openat,execve,connect,sendto,unlinkat,rename,clone,clone3,vfork,fork"
 
 pip_module_name() {
     name=${TARGET%%[<>=!~]*}
@@ -116,10 +116,34 @@ if [ "$install_status" -ne 0 ]; then
 fi
 
 if [ "$ECOSYSTEM" = "pip" ]; then
-    module_name=${SMOKE:-$(pip_module_name)}
+    DISCOVER_PY=$(cat <<'PY'
+import importlib.metadata as md, sys
+SKIP = {"pip", "setuptools", "wheel", "distribute"}
+mods = set()
+for d in md.distributions():
+    if sys.prefix not in str(d.locate_file("")):
+        continue  # only distributions the install added to the venv
+    if (d.metadata["Name"] or "").lower() in SKIP:
+        continue
+    top = (d.read_text("top_level.txt") or "").split()
+    if not top:
+        for f in d.files or []:
+            part = f.parts[0]
+            if part != ".." and not part.endswith((".dist-info", ".egg-info", ".data")):
+                top.append(part.removesuffix(".py"))
+    mods.update(t for t in top if t.isidentifier() and not t.startswith("_"))
+print("\n".join(sorted(mods)))
+PY
+)
+    FALLBACK=$(pip_module_name)
     strace -f -ttt -o "$SMOKE_TRACE" $TRACE_FILTER \
-        timeout --foreground "$smoke_phase_seconds" sh -c \
-        '/tmp/safeinstall-venv/bin/python -c "import $1"' sh "$module_name"
+        timeout --foreground "$smoke_phase_seconds" sh -c '
+            mods=$1
+            [ -n "$mods" ] || mods=$(/tmp/safeinstall-venv/bin/python -c "$2")
+            [ -n "$mods" ] || mods=$3
+            rc=0
+            for m in $mods; do /tmp/safeinstall-venv/bin/python -c "import $m" || rc=1; done
+            exit $rc' sh "$SMOKE" "$DISCOVER_PY" "$FALLBACK"
 else
     module_name=$(npm_module_name)
     strace -f -ttt -o "$SMOKE_TRACE" $TRACE_FILTER \

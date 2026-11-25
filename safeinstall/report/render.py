@@ -36,6 +36,7 @@ def _verdict_border(verdict: Verdict) -> str:
         Verdict.BLOCK: "red",
         Verdict.WARNING: "yellow",
         Verdict.NO_SUSPICIOUS_BEHAVIOR_OBSERVED: "green",
+        Verdict.INCONCLUSIVE: "yellow",
     }[verdict]
 
 
@@ -44,10 +45,16 @@ def _verdict_message(verdict: Verdict) -> str:
         return "Package blocked: critical behavior detected"
     if verdict is Verdict.WARNING:
         return "Package allowed with warnings"
+    if verdict is Verdict.INCONCLUSIVE:
+        return "Run incomplete: no conclusion can be drawn"
     return "No suspicious behavior observed"
 
 
-def render_terminal(artifacts: RunArtifacts, console: Console | None = None) -> None:
+def render_terminal(
+    artifacts: RunArtifacts,
+    console: Console | None = None,
+    show_timeline: bool = True,
+) -> None:
     """Render a complete terminal report for normalized run artifacts."""
     output = console or Console()
     verdict = artifacts.verdict or Verdict.NO_SUSPICIOUS_BEHAVIOR_OBSERVED
@@ -77,21 +84,24 @@ def render_terminal(artifacts: RunArtifacts, console: Console | None = None) -> 
         findings.add_row("-", "-", "No findings", "0")
     output.print(findings)
 
-    timeline = Table(title="Timeline", expand=True)
-    timeline.add_column("Time", justify="right")
-    timeline.add_column("Source")
-    timeline.add_column("Process")
-    timeline.add_column("Activity")
-    for event in sorted(artifacts.events, key=lambda item: item.ts):
-        timeline.add_row(
-            f"{event.ts:.3f}",
-            event.source.value,
-            event.process,
-            f"{event.type.value}: {_detail_summary(event)}",
-        )
-    if not artifacts.events:
-        timeline.add_row("-", "-", "-", "No events captured")
-    output.print(timeline)
+    if show_timeline:
+        timeline = Table(title="Timeline", expand=True)
+        timeline.add_column("Time", justify="right")
+        timeline.add_column("Source")
+        timeline.add_column("Process")
+        timeline.add_column("Activity")
+        for event in sorted(artifacts.events, key=lambda item: item.ts):
+            timeline.add_row(
+                f"{event.ts:.3f}",
+                event.source.value,
+                event.process,
+                f"{event.type.value}: {_detail_summary(event)}",
+            )
+        if not artifacts.events:
+            timeline.add_row("-", "-", "-", "No events captured")
+        output.print(timeline)
+    else:
+        output.print(f"Timeline hidden ({len(artifacts.events)} events); see report.html for the full list.")
 
     hosts = Counter(
         str(event.detail["host"])

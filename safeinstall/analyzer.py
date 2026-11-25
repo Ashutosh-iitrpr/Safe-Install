@@ -1,10 +1,11 @@
 """Build normalized findings and reports from one completed run directory."""
 
 import json
+import time
 from pathlib import Path
 from typing import Any
 
-from .contracts import RunArtifacts, RunMeta
+from .contracts import RunArtifacts, RunMeta, Verdict
 from .parsers.fsdiff_parser import parse_fsdiff_file
 from .parsers.gateway_parser import parse_gateway_file
 from .parsers.strace_parser import parse_strace_file
@@ -29,6 +30,14 @@ def _canaries(run_dir: Path) -> list[str]:
         if isinstance(entry, dict) and entry.get("token")
     ]
 
+def _run_incomplete(directory: Path, meta: RunMeta) -> bool:
+    trace = directory / "strace.log"
+    return (
+        (directory / "orchestrator-error.txt").exists()
+        or not trace.exists()
+        or trace.stat().st_size == 0
+        or meta.exit_code != 0
+    )
 
 def analyze_run(run_dir: str | Path, run_id: str) -> RunArtifacts:
     """Parse, analyze, and persist all available artifacts for a run."""
@@ -36,19 +45,27 @@ def analyze_run(run_dir: str | Path, run_id: str) -> RunArtifacts:
     meta = RunMeta.model_validate(
         json.loads((directory / "meta.json").read_text(encoding="utf-8"))
     )
+    end_ts = meta.finished_at.timestamp() if meta.finished_at else time.time()
+    fsdiff_events = [
+        event.model_copy(update={"ts": end_ts})
+        for event in _events_from(directory / "fsdiff.txt", parse_fsdiff_file)
+    ]
     events = (
         _events_from(directory / "strace.log", parse_strace_file)
         + _events_from(directory / "gateway.jsonl", parse_gateway_file)
-        + _events_from(directory / "fsdiff.txt", parse_fsdiff_file)
+        + fsdiff_events
     )
     events.sort(key=lambda event: event.ts)
     findings = analyze_events(events, canaries=_canaries(directory))
+    verdict = verdict_for(findings)
+    if verdict is Verdict.NO_SUSPICIOUS_BEHAVIOR_OBSERVED and _run_incomplete(directory, meta):
+        verdict = Verdict.INCONCLUSIVE
     artifacts = RunArtifacts(
-        run_id=run_id,
-        meta=meta,
-        events=events,
+        run_id=run_id, 
+        meta=meta, 
+        events=events, 
         findings=findings,
-        verdict=verdict_for(findings),
+        verdict=verdict,                                   # was verdict_for(findings)
     )
 
     _write_json(directory / "events.json", [event.model_dump(mode="json") for event in events])

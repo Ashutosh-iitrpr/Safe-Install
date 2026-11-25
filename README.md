@@ -435,6 +435,7 @@ _Add new decisions below as D-007, D-008, ..._
 | 2026-11-24 | Implemented and smoke-tested the Docker run orchestrator with run directories, internal/gateway topology, timeout, metadata, container logs, fsdiff, and guaranteed cleanup | Phase 3 in progress | T-019 |
 | 2026-11-24 | Added Typer `pip` and `npm` CLI commands, tested command parsing and real local pip execution through the orchestrator | Phase 3 in progress | T-020 |
 | 2026-11-24 | Added Docker diff normalization and live peak-memory sampling, persisted in `fsdiff.txt` and `meta.json` | Phase 3 complete | T-021 |
+| 2026-11-24 | Redesigned the Streamlit UI as a branded analysis control room with run history, verdict cards, metrics, tabs, network charting, and report downloads | Phase 7 in progress | Documentation complete |
 | 2026-11-24 | Completed limitations, quick-start usage, demo script, resume bullets, and benchmark-plan documentation; stretch benchmark and recorded rehearsal remain incomplete | Phase 7 in progress | T-037 |
 | 2026-11-24 | Fixed NumPy native-extension imports by changing `/tmp` from `noexec` to explicit `exec,nosuid,nodev`; NumPy 2.4.6 installed and imported successfully | Phase 3 complete | T-021 |
 | 2026-11-24 | Implemented strace normalization for exec, file read/write, and network connects; filtered system noise and retained failed connect evidence | Phase 4 in progress | T-022 |

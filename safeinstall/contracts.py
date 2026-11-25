@@ -42,7 +42,7 @@ class Verdict(StrEnum):
     BLOCK = "BLOCK"
     WARNING = "WARNING"
     NO_SUSPICIOUS_BEHAVIOR_OBSERVED = "NO SUSPICIOUS BEHAVIOR OBSERVED"
-
+    INCONCLUSIVE = "INCONCLUSIVE"
 
 class ContractModel(BaseModel):
     """Base model that rejects fields outside the public contract."""

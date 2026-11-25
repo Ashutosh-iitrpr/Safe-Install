@@ -4,7 +4,8 @@ import base64
 import binascii
 from pathlib import Path
 from urllib.parse import quote, unquote
-
+import re
+import ipaddress
 import yaml
 
 from safeinstall.contracts import Evidence, Event, Finding, Severity, Verdict
@@ -18,6 +19,12 @@ ALLOWED_PATH_PREFIXES = (
     "/home/sandbox/",
 )
 DECOY_MARKERS = ("id_rsa", "/.env", "/.aws/credentials")
+SENSITIVE_WRITE_MARKERS = (
+    "/.bashrc", "/.bash_profile", "/.profile", "/.zshrc", "/.ssh/", "/.aws/",
+    "/.npmrc", "/.pypirc", "/.git-credentials", "/.config/autostart/",
+    "/.config/systemd/", "/.git/hooks/", "/cron",
+)
+SRC_BUILD_MARKERS = ("/build/", "/dist/", ".egg-info", "/__pycache__/", "/node_modules/")
 REGISTRY_ALLOWLIST = frozenset({
     "pypi.org",
     "files.pythonhosted.org",
@@ -33,6 +40,28 @@ SUSPICIOUS_COMMANDS = (
     "base64",
     "powershell",
 )
+PROXY_PORT = 3128
+
+
+def _is_infrastructure(host: str, port: object) -> bool:
+    """Loopback and the SafeInstall gateway proxy are not suspicious; everything else is."""
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return ip.is_loopback or (ip.is_private and str(port) == str(PROXY_PORT))
+
+
+def _is_suspicious_write(path: str) -> bool:
+    if path in ("/src", "/work", "/tmp", "/home/sandbox"):   # mount points, not writes
+        return False
+    if not path.startswith("/"):
+        return False
+    if any(marker in path for marker in SENSITIVE_WRITE_MARKERS + DECOY_MARKERS):
+        return True
+    if path.startswith("/src/"):
+        return not any(marker in path for marker in SRC_BUILD_MARKERS)
+    return not any(path.startswith(prefix) for prefix in ALLOWED_PATH_PREFIXES)
 
 
 def load_rules(path: str | Path = RULES_PATH) -> dict:
@@ -60,21 +89,34 @@ def _canary_variants(tokens: list[str]) -> set[str]:
     return variants
 
 
+_B64_RE = re.compile(r"[A-Za-z0-9+/_-]{16,}={0,2}")
+_HEX_RE = re.compile(r"(?:[0-9a-fA-F]{2}){16,}")
+
+
+def _decoded_views(text: str) -> list[str]:
+    """The text plus every base64/hex/url-decoded view of it (works at any base64 alignment)."""
+    views = [text, unquote(text)]
+    for blob in _B64_RE.findall(text):
+        padded = blob + "=" * (-len(blob) % 4)
+        for decode in (base64.b64decode, base64.urlsafe_b64decode):
+            try:
+                views.append(decode(padded).decode("utf-8", "ignore"))
+            except (binascii.Error, ValueError):
+                pass
+    for blob in _HEX_RE.findall(text):
+        views.append(bytes.fromhex(blob).decode("utf-8", "ignore"))
+    return views
+
+
 def _text_contains_canary(text: str, variants: set[str]) -> bool:
     if not text:
         return False
-    lowered = text.lower()
-    for variant in variants:
-        if variant and variant.lower() in lowered:
+    needles = [variant.lower() for variant in variants if variant]
+    for view in _decoded_views(text):
+        lowered = view.lower()
+        if any(needle in lowered for needle in needles):
             return True
-        try:
-            decoded = base64.b64decode(variant, validate=True).decode("utf-8", "ignore")
-            if decoded and decoded.lower() in lowered:
-                return True
-        except (binascii.Error, UnicodeDecodeError):
-            pass
     return False
-
 
 def verdict_for(findings: list[Finding]) -> Verdict:
     """Apply critical/high verdict precedence."""
@@ -152,7 +194,7 @@ def analyze_events(
         if event.type.value == "net_connect":
             host = str(detail.get("host", "")).lower().rstrip(".")
             port = detail.get("port")
-            if host and not host.startswith(("127.", "10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.", "172.21.", "172.22.", "172.23.", "172.24.", "172.25.", "172.26.", "172.27.", "172.28.", "172.29.", "172.30.", "172.31.", "192.168.")):
+            if host and not _is_infrastructure(host, port):
                 if host not in allowlist:
                     unknown_evidence.append(Evidence(
                         event_ref=ref,
@@ -186,10 +228,7 @@ def analyze_events(
 
         if event.type.value == "file_write":
             path = str(detail.get("path", ""))
-            if (
-                path.startswith("/")
-                and not any(path.startswith(prefix) for prefix in ALLOWED_PATH_PREFIXES)
-            ):
+            if _is_suspicious_write(path):
                 outside_write_evidence.append(Evidence(
                     event_ref=ref,
                     summary=f"{event.process} wrote {path}",

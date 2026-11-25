@@ -48,13 +48,40 @@ def _successful(result: str) -> bool:
     result = result.strip()
     return not result.startswith("-1")
 
+UNFINISHED_RE = re.compile(
+    r"^(?P<pid>\d+)\s+(?P<ts>\d+(?:\.\d+)?)\s+(?P<sys>\w+)\((?P<args>.*?)\s*<unfinished \.\.\.>$"
+)
+RESUMED_RE = re.compile(
+    r"^(?P<pid>\d+)\s+(?P<ts>\d+(?:\.\d+)?)\s+<\.\.\. (?P<sys>\w+) resumed>(?P<rest>.*)$"
+)
+
+
+def merge_split_lines(text: str) -> str:
+    """Join strace `<unfinished ...>` / `<... resumed>` pairs back into single lines."""
+    pending: dict[tuple[str, str], tuple[str, str]] = {}
+    out: list[str] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        started = UNFINISHED_RE.match(line)
+        if started:
+            pending[(started["pid"], started["sys"])] = (started["ts"], started["args"])
+            continue
+        resumed = RESUMED_RE.match(line)
+        if resumed:
+            begin = pending.pop((resumed["pid"], resumed["sys"]), None)
+            if begin:
+                out.append(f'{resumed["pid"]} {begin[0]} {resumed["sys"]}({begin[1]}{resumed["rest"]}')
+            continue
+        out.append(line)
+    return "\n".join(out)
+
 
 def parse_strace(text: str) -> list[Event]:
     """Convert strace text into normalized Event contracts."""
     events: list[Event] = []
     process_by_pid: dict[int, str] = {}
 
-    for line in text.splitlines():
+    for line in merge_split_lines(text).splitlines():
         match = LINE_RE.match(line.strip())
         if not match:
             continue
@@ -99,7 +126,12 @@ def parse_strace(text: str) -> list[Event]:
             continue
 
         process = process_by_pid.get(pid, f"pid-{pid}")
-
+        if syscall in {"clone", "clone3", "vfork", "fork"}:
+            child = result.split()[0] if result else ""
+            if child.isdigit() and int(child) > 0:
+                process_by_pid[int(child)] = process   # children/threads inherit the name
+            continue   
+        
         if syscall == "openat" and _successful(result):
             strings = _quoted_strings(args)
             if not strings:

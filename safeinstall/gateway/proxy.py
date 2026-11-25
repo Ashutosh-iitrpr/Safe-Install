@@ -6,6 +6,7 @@ import json
 import select
 import socket
 import socketserver
+import time
 import threading
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
@@ -40,6 +41,7 @@ class GatewayProxy:
         return hostname(host) in self.allowlist
 
     def log(self, record: dict[str, object]) -> None:
+        record = {"ts": time.time(), **record}
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         with self._lock:
             with self.log_path.open("a", encoding="utf-8") as log_file:
@@ -139,7 +141,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
         body = self._request_body()
         allowed = self.server.gateway.allowed(host)
-        body_excerpt = body[:1024].decode("utf-8", "replace")
+        body_excerpt = body[:65536].decode("utf-8", "replace")
         self.server.gateway.log({
             "type": "http_request",
             "method": self.command,

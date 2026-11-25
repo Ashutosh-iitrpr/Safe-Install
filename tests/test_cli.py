@@ -91,4 +91,7 @@ def test_verdict_exit_codes() -> None:
     assert cli.cli_exit_code(Verdict.NO_SUSPICIOUS_BEHAVIOR_OBSERVED) == 0
     assert cli.cli_exit_code(Verdict.WARNING) == 1
     assert cli.cli_exit_code(Verdict.BLOCK) == 2
-    assert cli.cli_exit_code(None, sandbox_exit_code=1) == 1
+    assert cli.cli_exit_code(None, sandbox_exit_code=1) == 3
+    assert cli.cli_exit_code(Verdict.BLOCK, sandbox_exit_code=1) == 2
+    assert cli.cli_exit_code(Verdict.BLOCK, timed_out=True) == 2
+    assert cli.cli_exit_code(Verdict.INCONCLUSIVE) == 3
