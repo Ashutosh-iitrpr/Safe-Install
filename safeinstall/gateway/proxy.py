@@ -8,6 +8,7 @@ import socket
 import socketserver
 import time
 import threading
+import os
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Iterable
@@ -19,6 +20,14 @@ DEFAULT_REGISTRY_ALLOWLIST = frozenset({
     "files.pythonhosted.org",
     "registry.npmjs.org",
 })
+
+MAX_BODY_BYTES = 8 * 1024 * 1024
+ALLOWED_CONNECT_PORTS = {80, 443}
+
+
+def _env_allowlist() -> frozenset[str]:
+    raw = os.environ.get("SAFEINSTALL_ALLOWLIST", "")
+    return frozenset(hostname(item) for item in raw.split(",") if item.strip())
 
 
 def hostname(host: str) -> str:
@@ -34,7 +43,11 @@ class GatewayProxy:
 
     def __init__(self, log_path: Path, allowlist: Iterable[str] = ()) -> None:
         self.log_path = log_path
-        self.allowlist = frozenset(hostname(item) for item in allowlist) or DEFAULT_REGISTRY_ALLOWLIST
+        self.allowlist = (
+            frozenset(hostname(item) for item in allowlist)
+            or _env_allowlist()
+            or DEFAULT_REGISTRY_ALLOWLIST   # standalone/tests only; the orchestrator always sets the env
+        )
         self._lock = threading.Lock()
 
     def allowed(self, host: str) -> bool:
@@ -81,7 +94,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
     def do_CONNECT(self) -> None:
         host, port = self._host_and_port()
-        allowed = self.server.gateway.allowed(host)
+        allowed = self.server.gateway.allowed(host) and port in ALLOWED_CONNECT_PORTS
         self.server.gateway.log({
             "type": "http_request",
             "method": "CONNECT",
@@ -172,6 +185,9 @@ class ProxyHandler(BaseHTTPRequestHandler):
         try:
             connection = http.client.HTTPConnection(host, port, timeout=10)
             forwarded_headers = dict(self.headers)
+            if "chunked" in forwarded_headers.get("Transfer-Encoding", "").lower():
+                forwarded_headers.pop("Transfer-Encoding")
+                forwarded_headers["Content-Length"] = str(len(body))
             forwarded_headers.pop("Proxy-Authorization", None)
             connection.request(self.command, path, body=body, headers=forwarded_headers)
             response = connection.getresponse()
@@ -189,11 +205,40 @@ class ProxyHandler(BaseHTTPRequestHandler):
             self.send_error(502, str(exc))
 
     def _request_body(self) -> bytes:
-        length = int(self.headers.get("Content-Length", "0"))
-        return self.rfile.read(length) if length else b""
+        """Read the body (Content-Length or chunked), keeping at most MAX_BODY_BYTES in memory."""
+        if "chunked" in self.headers.get("Transfer-Encoding", "").lower():
+            return self._read_chunked()
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            length = 0
+        return self._read_exact(max(length, 0), MAX_BODY_BYTES)
 
-    def log_message(self, format: str, *args: object) -> None:
-        return
+    def _read_exact(self, length: int, limit: int) -> bytes:
+        kept = self.rfile.read(min(length, limit))
+        remaining = length - len(kept)
+        while remaining > 0:  # drain the rest without storing it
+            chunk = self.rfile.read(min(remaining, 65536))
+            if not chunk:
+                break
+            remaining -= len(chunk)
+        return kept
+
+    def _read_chunked(self) -> bytes:
+        body = bytearray()
+        while True:
+            size_line = self.rfile.readline(65537).strip().split(b";")[0]
+            try:
+                size = int(size_line, 16)
+            except ValueError:
+                break
+            if size == 0:
+                while self.rfile.readline(65537) not in (b"\r\n", b"\n", b""):
+                    pass  # skip trailers
+                break
+            body += self._read_exact(size, max(MAX_BODY_BYTES - len(body), 0))
+            self.rfile.readline(65537)  # CRLF after each chunk
+        return bytes(body)
 
 
 def serve_proxy(host: str, port: int, log_path: Path, allowlist: Iterable[str] = ()) -> _ProxyServer:

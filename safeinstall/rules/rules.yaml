@@ -1,8 +1,3 @@
-registry_allowlist:
-  - pypi.org
-  - files.pythonhosted.org
-  - registry.npmjs.org
-
 rules:
   DECOY_READ:
     severity: critical

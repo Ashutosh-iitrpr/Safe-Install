@@ -7,7 +7,7 @@ from urllib.parse import quote, unquote
 import re
 import ipaddress
 import yaml
-
+from safeinstall.config import REGISTRY_ALLOWLIST
 from safeinstall.contracts import Evidence, Event, Finding, Severity, Verdict
 
 
@@ -18,18 +18,13 @@ ALLOWED_PATH_PREFIXES = (
     "/src/",
     "/home/sandbox/",
 )
-DECOY_MARKERS = ("id_rsa", "/.env", "/.aws/credentials")
+DECOY_MARKERS = ("id_rsa", "/.env", "/.aws/credentials", "/.git-credentials", "/.pypirc")
 SENSITIVE_WRITE_MARKERS = (
     "/.bashrc", "/.bash_profile", "/.profile", "/.zshrc", "/.ssh/", "/.aws/",
     "/.npmrc", "/.pypirc", "/.git-credentials", "/.config/autostart/",
     "/.config/systemd/", "/.git/hooks/", "/cron",
 )
 SRC_BUILD_MARKERS = ("/build/", "/dist/", ".egg-info", "/__pycache__/", "/node_modules/")
-REGISTRY_ALLOWLIST = frozenset({
-    "pypi.org",
-    "files.pythonhosted.org",
-    "registry.npmjs.org",
-})
 SUSPICIOUS_COMMANDS = (
     "curl",
     "wget",
@@ -136,9 +131,7 @@ def analyze_events(
     """Apply starter rules to normalized events."""
     config = load_rules(rules_path)
     rule_config = config.get("rules", {})
-    allowlist = frozenset(
-        config.get("registry_allowlist", sorted(REGISTRY_ALLOWLIST))
-    ) | REGISTRY_ALLOWLIST
+    allowlist = REGISTRY_ALLOWLIST
     canary_variants = _canary_variants(canaries or [])
 
     decoy_evidence: list[Evidence] = []

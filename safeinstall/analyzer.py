@@ -11,6 +11,7 @@ from .parsers.gateway_parser import parse_gateway_file
 from .parsers.strace_parser import parse_strace_file
 from .report.render import render_html
 from .rules.engine import analyze_events, verdict_for
+from .parsers.orchestrator_parser import parse_orchestrator_file
 
 
 def _events_from(path: Path, parser) -> list:
@@ -54,6 +55,7 @@ def analyze_run(run_dir: str | Path, run_id: str) -> RunArtifacts:
         _events_from(directory / "strace.log", parse_strace_file)
         + _events_from(directory / "gateway.jsonl", parse_gateway_file)
         + fsdiff_events
+        + _events_from(directory / "orchestrator-events.jsonl", parse_orchestrator_file)
     )
     events.sort(key=lambda event: event.ts)
     findings = analyze_events(events, canaries=_canaries(directory))

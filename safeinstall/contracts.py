@@ -13,6 +13,7 @@ class EventSource(StrEnum):
     STRACE = "strace"
     GATEWAY = "gateway"
     FSDIFF = "fsdiff"
+    ORCHESTRATOR = "orchestrator"
 
 
 class EventType(StrEnum):

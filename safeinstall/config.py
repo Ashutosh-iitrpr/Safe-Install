@@ -76,3 +76,7 @@ def gateway_environment(proxy_url: str) -> dict[str, str]:
         "NO_PROXY": "127.0.0.1,localhost",
         "no_proxy": "127.0.0.1,localhost",
     }
+
+# Single source of truth for hosts the gateway may forward. The orchestrator passes it to the
+# gateway container; the rules engine imports it.
+REGISTRY_ALLOWLIST = frozenset({"pypi.org", "files.pythonhosted.org", "registry.npmjs.org"})

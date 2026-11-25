@@ -80,6 +80,7 @@ def parse_strace(text: str) -> list[Event]:
     """Convert strace text into normalized Event contracts."""
     events: list[Event] = []
     process_by_pid: dict[int, str] = {}
+    pid_limit_seen = False
 
     for line in merge_split_lines(text).splitlines():
         match = LINE_RE.match(line.strip())
@@ -129,8 +130,14 @@ def parse_strace(text: str) -> list[Event]:
         if syscall in {"clone", "clone3", "vfork", "fork"}:
             child = result.split()[0] if result else ""
             if child.isdigit() and int(child) > 0:
-                process_by_pid[int(child)] = process   # children/threads inherit the name
-            continue   
+                process_by_pid[int(child)] = process
+            elif "EAGAIN" in result and not pid_limit_seen:
+                pid_limit_seen = True
+                events.append(Event(
+                    ts=ts, source="strace", type="resource_limit", pid=pid, process=process,
+                    detail={"resource": "pids", "message": "fork/clone failed with EAGAIN (pids limit reached)"},
+                ))
+            continue  
         
         if syscall == "openat" and _successful(result):
             strings = _quoted_strings(args)
