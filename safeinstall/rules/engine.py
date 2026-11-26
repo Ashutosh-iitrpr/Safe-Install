@@ -113,12 +113,32 @@ def _text_contains_canary(text: str, variants: set[str]) -> bool:
             return True
     return False
 
+def _is_timeout_only_resource_abuse(finding: Finding) -> bool:
+    """Return True when RESOURCE_ABUSE only reflects hitting the observation timeout."""
+    if finding.rule_id != "RESOURCE_ABUSE" or not finding.evidence:
+        return False
+    return all(
+        "timeout" in ev.summary.lower()
+        or bool(re.search(r"\b\d+s limit\b", ev.summary.lower()))
+        for ev in finding.evidence
+    )
+
+
 def verdict_for(findings: list[Finding]) -> Verdict:
-    """Apply critical/high verdict precedence."""
+    """Apply critical/high/medium verdict precedence.
+
+    Timeout-only RESOURCE_ABUSE findings do not escalate to WARNING on their own
+    so incomplete timed-out runs resolve to INCONCLUSIVE in the analyzer.
+    """
     severities = {finding.severity for finding in findings}
     if Severity.CRITICAL in severities:
         return Verdict.BLOCK
     if Severity.HIGH in severities:
+        return Verdict.WARNING
+    if any(
+        finding.severity == Severity.MEDIUM and not _is_timeout_only_resource_abuse(finding)
+        for finding in findings
+    ):
         return Verdict.WARNING
     return Verdict.NO_SUSPICIOUS_BEHAVIOR_OBSERVED
 
@@ -228,10 +248,10 @@ def analyze_events(
                 ))
 
         if event.type.value == "resource_limit":
-            suspicious_evidence = suspicious_evidence
+            msg = str(detail.get("message") or f"{event.process} reached a resource limit")
             resource_evidence.append(Evidence(
                 event_ref=ref,
-                summary=f"{event.process} reached a resource limit",
+                summary=msg,
             ))
 
     findings: list[Finding] = []

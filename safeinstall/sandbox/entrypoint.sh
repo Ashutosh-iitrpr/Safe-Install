@@ -49,6 +49,13 @@ case "$TIMEOUT_SECONDS" in
     ''|*[!0-9]*|0) echo "invalid timeout: $TIMEOUT_SECONDS" >&2; exit 64 ;;
 esac
 
+if [ "$TARGET" = "/src" ]; then
+    mkdir -p /tmp/src || exit 70
+    tar -C /src --exclude=.git --exclude=.venv --exclude=node_modules --exclude=runs -cf - . \
+        | tar -C /tmp/src -xf - || exit 70
+    TARGET=/tmp/src
+fi
+
 mkdir -p "$WORK_DIR"
 : > "$STRACE_LOG"
 INSTALL_TRACE="$WORK_DIR/strace-install.log"
@@ -58,6 +65,12 @@ SMOKE_TRACE="$WORK_DIR/strace-smoke.log"
 
 make-decoys --home "$HOME_DIR" --manifest "$WORK_DIR/canaries.json" \
     || exit 70
+
+unset SAFEINSTALL_CANARIES
+DECOY_FILES=$(find "$HOME_DIR" -type f | sort)
+for f in $DECOY_FILES; do
+    printf 'SAFEINSTALL_DECOY_START %s %s\n' "$(sha256sum "$f" | cut -d' ' -f1)" "$f"
+done
 
 PROXY_URL="${SAFEINSTALL_PROXY_URL:-}"
 if [ -n "$PROXY_URL" ]; then
@@ -98,8 +111,8 @@ if [ "$ECOSYSTEM" = "pip" ]; then
     strace -f -ttt -o "$INSTALL_TRACE" $TRACE_FILTER \
         timeout --foreground "$install_phase_seconds" sh -c \
         'python3 -m venv --system-site-packages /tmp/safeinstall-venv &&
-         /tmp/safeinstall-venv/bin/python -m pip install --disable-pip-version-check --no-build-isolation "$1"' \
-        sh "$TARGET"
+         /tmp/safeinstall-venv/bin/python -m pip install --disable-pip-version-check --no-build-isolation --report "$2" "$1"' \
+        sh "$TARGET" "$WORK_DIR/pip-report.json"
 else
     mkdir -p "$WORK_DIR/npm"
     strace -f -ttt -o "$INSTALL_TRACE" $TRACE_FILTER \
@@ -109,6 +122,13 @@ else
 fi
 install_status=$?
 cat "$INSTALL_TRACE" >> "$STRACE_LOG"
+
+if [ "$ECOSYSTEM" = "pip" ] && [ -f "$WORK_DIR/pip-report.json" ]; then
+    echo SAFEINSTALL_PIP_REPORT_BEGIN
+    cat "$WORK_DIR/pip-report.json"
+    echo
+    echo SAFEINSTALL_PIP_REPORT_END
+fi
 
 if [ "$install_status" -ne 0 ]; then
     printf 'SAFEINSTALL_PHASE=install\nSAFEINSTALL_EXIT_CODE=%s\n' "$install_status" \
@@ -156,6 +176,11 @@ cat "$SMOKE_TRACE" >> "$STRACE_LOG"
 
 printf 'SAFEINSTALL_PHASE=smoke\nSAFEINSTALL_EXIT_CODE=%s\n' "$smoke_status" \
     >> "$STRACE_LOG"
+
+for f in $DECOY_FILES; do
+    if [ -f "$f" ]; then h=$(sha256sum "$f" | cut -d' ' -f1); else h=MISSING; fi
+    printf 'SAFEINSTALL_DECOY_END %s %s\n' "$h" "$f"
+done
 
 if [ "$install_status" -ne 0 ]; then
     exit "$install_status"

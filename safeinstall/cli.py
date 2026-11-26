@@ -1,6 +1,8 @@
 """Command-line entry point for SafeInstall."""
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import typer
@@ -46,6 +48,19 @@ def _json_result(result: RunResult, cli_code: int) -> str:
     )
 
 
+def _then_install(ecosystem: str, result, code: int) -> None:
+    pinned = result.run_dir / "pinned-requirements.txt"
+    if ecosystem != "pip" or code != 0 or not pinned.exists():
+        typer.echo("Not installing: needs a clean pip analysis of a registry package (not a local/VCS target).", err=True)
+        return
+    typer.echo("Installing the exact analyzed artifacts (pinned by sha256)...")
+    done = subprocess.run(
+        [sys.executable, "-m", "pip", "install", "--require-hashes", "--no-deps", "-r", str(pinned)]
+    )
+    if done.returncode != 0:
+        raise typer.Exit(code=3)
+
+
 def _run(
     ecosystem: str,
     target: str,
@@ -53,6 +68,7 @@ def _run(
     timeout: int,
     json_output: bool = False,
     show_timeline: bool = True,
+    then_install: bool = False,
 ) -> None:
     if timeout < 1:
         raise typer.BadParameter("timeout must be at least 1 second")
@@ -94,6 +110,8 @@ def _run(
     error_file = result.run_dir / "orchestrator-error.txt"
     if error_file.exists() and not json_output:
         typer.echo(f"SafeInstall run error: {error_file.read_text(encoding='utf-8')}", err=True)
+    if then_install:
+        _then_install(ecosystem, result, code)
     if code:
         raise typer.Exit(code=code)
 
@@ -105,9 +123,10 @@ def pip_command(
     timeout: int = typer.Option(120, "--timeout", min=1, help="Maximum observation seconds"),
     json_output: bool = typer.Option(False, "--json", help="Print the result as JSON"),
     no_timeline: bool = typer.Option(False, "--no-timeline", help="Hide the event timeline in the terminal report"),
+    then_install: bool = typer.Option(False, "--then-install", help="pip only: after a clean verdict, install the exact analyzed, sha256-pinned artifacts"),
 ) -> None:
     """Run a pip package in the SafeInstall sandbox."""
-    _run("pip", target, smoke, timeout, json_output, not no_timeline)
+    _run("pip", target, smoke, timeout, json_output, not no_timeline, then_install)
 
 
 @app.command("npm")
@@ -117,6 +136,7 @@ def npm_command(
     timeout: int = typer.Option(120, "--timeout", min=1, help="Maximum observation seconds"),
     json_output: bool = typer.Option(False, "--json", help="Print the result as JSON"),
     no_timeline: bool = typer.Option(False, "--no-timeline", help="Hide the event timeline in the terminal report"),
+    then_install: bool = typer.Option(False, "--then-install", help="pip only: after a clean verdict, install the exact analyzed, sha256-pinned artifacts"),
 ) -> None:
     """Run an npm package in the SafeInstall sandbox."""
-    _run("npm", target, smoke, timeout, json_output, not no_timeline)
+    _run("npm", target, smoke, timeout, json_output, not no_timeline, then_install)

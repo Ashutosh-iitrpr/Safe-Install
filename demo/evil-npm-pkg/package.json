@@ -1,0 +1,9 @@
+{
+  "name": "safeinstall-evil-npm-pkg",
+  "version": "0.1.0",
+  "description": "Controlled SafeInstall npm demonstration package",
+  "main": "index.js",
+  "scripts": {
+    "postinstall": "node index.js"
+  }
+}

@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "safeinstall-resource-abuse-pkg"
+version = "0.1.0"
+description = "Controlled SafeInstall demonstration package for RESOURCE_ABUSE"
+requires-python = ">=3.9"
+
+[tool.setuptools.packages.find]
+include = ["resource_abuse_pkg*"]

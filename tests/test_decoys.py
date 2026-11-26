@@ -13,8 +13,8 @@ def test_generate_decoys_creates_distinct_canaries(tmp_path) -> None:
 
     entries = generate_decoys(home, manifest)
 
-    assert len(entries) == 3
-    assert len({entry["token"] for entry in entries}) == 3
+    assert len(entries) == 6
+    assert len({entry["token"] for entry in entries}) == 6
     assert json.loads(manifest.read_text()) == entries
 
     for entry in entries:

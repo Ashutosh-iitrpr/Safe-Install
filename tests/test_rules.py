@@ -95,3 +95,57 @@ def test_relative_pip_wheel_writes_are_not_outside_writes() -> None:
     ]
 
     assert analyze_events(events) == []
+
+
+def test_medium_findings_warn_except_timeout_only_resource_abuse() -> None:
+    exec_events = [
+        Event(
+            ts=1.0,
+            source="strace",
+            type="exec",
+            pid=10,
+            process="sh",
+            detail={"cmdline": ["curl", "https://example.com/install.sh"]},
+        )
+    ]
+    exec_findings = analyze_events(exec_events)
+    assert verdict_for(exec_findings).value == "WARNING"
+
+    oom_events = [
+        Event(
+            ts=2.0,
+            source="orchestrator",
+            type="resource_limit",
+            pid=0,
+            process="orchestrator",
+            detail={"resource": "memory", "message": "sandbox killed by the memory limit"},
+        )
+    ]
+    oom_findings = analyze_events(oom_events)
+    assert verdict_for(oom_findings).value == "WARNING"
+
+    pids_events = [
+        Event(
+            ts=2.5,
+            source="strace",
+            type="resource_limit",
+            pid=10,
+            process="python",
+            detail={"resource": "pids", "message": "fork/clone failed with EAGAIN (pids limit reached)"},
+        )
+    ]
+    pids_findings = analyze_events(pids_events)
+    assert verdict_for(pids_findings).value == "WARNING"
+
+    timeout_events = [
+        Event(
+            ts=3.0,
+            source="orchestrator",
+            type="resource_limit",
+            pid=0,
+            process="orchestrator",
+            detail={"resource": "timeout", "message": "run hit the 120s limit"},
+        )
+    ]
+    timeout_findings = analyze_events(timeout_events)
+    assert verdict_for(timeout_findings).value == "NO SUSPICIOUS BEHAVIOR OBSERVED"

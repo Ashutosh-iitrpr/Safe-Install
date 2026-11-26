@@ -29,3 +29,5 @@ safeinstall = ["report/*.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["docker: needs a running Docker daemon and the :test images (make build)"]
+addopts = "-m 'not docker'"

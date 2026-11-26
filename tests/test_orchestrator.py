@@ -33,17 +33,22 @@ class FakeContainer:
     def logs(self) -> bytes:
         return b"fake logs"
 
+    def stop(self, timeout: int = 2) -> None:
+        pass
+
     def remove(self, force: bool) -> None:
         self.removed = True
 
 
 class FakeNetwork:
-    def __init__(self) -> None:
+    def __init__(self, name: str = "test-internal") -> None:
+        self.name = name
         self.removed = False
         self.gateway = None
 
     def connect(self, gateway: FakeContainer) -> None:
         self.gateway = gateway
+        gateway.attrs["NetworkSettings"]["Networks"][self.name] = {"IPAddress": "172.18.0.2"}
 
     def remove(self) -> None:
         self.removed = True
@@ -55,6 +60,7 @@ class FakeNetworks:
 
     def create(self, name: str, internal: bool) -> FakeNetwork:
         assert internal is True
+        self.network = FakeNetwork(name=name)
         return self.network
 
 
@@ -64,13 +70,6 @@ class FakeContainers:
 
     def run(self, *args: object, **kwargs: object) -> FakeContainer:
         container = FakeContainer()
-        container.attrs["NetworkSettings"]["Networks"] = {
-            kwargs.get("name", "test-internal"): {"IPAddress": "172.18.0.3"}
-        }
-        if kwargs.get("name", "").startswith("safeinstall-gateway"):
-            container.attrs["NetworkSettings"]["Networks"] = {
-                "test-internal": {"IPAddress": "172.18.0.2"}
-            }
         self.items.append(container)
         return container
 
@@ -95,7 +94,8 @@ def test_orchestrator_creates_meta_and_cleans_up() -> None:
             docker_client=client,
         )
 
-        result = orchestrator.run("pip", "/src/clean-pkg")
+        demo_dir = Path(__file__).resolve().parents[1] / "demo" / "clean-pkg"
+        result = orchestrator.run("pip", str(demo_dir))
 
         assert result.exit_code == 0
         assert (result.run_dir / "meta.json").exists()

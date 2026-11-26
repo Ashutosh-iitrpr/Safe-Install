@@ -1,6 +1,7 @@
 """Sandbox lifecycle orchestration."""
 
 import json
+import os
 import secrets
 import time
 import threading
@@ -14,6 +15,10 @@ import docker
 from .config import SandboxLimits, gateway_environment, sandbox_container_kwargs
 from .contracts import Verdict
 from .analyzer import analyze_run
+from .runplan import (
+    GATEWAY_COMMAND, allowlist_env, canary_env, decoy_tamper_paths, is_local_target,
+    make_canaries, orchestrator_events, pinned_requirements, pip_report_from_log, safe_copy,
+)
 
 
 @dataclass(frozen=True)
@@ -87,6 +92,7 @@ class Orchestrator:
         exit_code = 1
         started_at = datetime.now(timezone.utc).isoformat()
         peak_mem = None
+        resolved_version = None
 
         self._write_meta(
             meta_path,
@@ -114,60 +120,68 @@ class Orchestrator:
             topology.validate()
             network = self.client.networks.create(topology.internal_name, internal=True)
 
+            gateway_dir = run_dir / "gateway"   # writable only by the gateway container
+            sandbox_dir = run_dir / "sandbox"   # the untrusted sandbox's /work
+            gateway_dir.mkdir()
+            sandbox_dir.mkdir()
+            canaries = make_canaries()          # generated on the host, never read back from the sandbox
+            (run_dir / "canaries.json").write_text(
+                json.dumps(canaries, indent=2) + "\n", encoding="utf-8"
+            )
+
             gateway = self.client.containers.run(
                 self.gateway_image,
-                command=[
-                    "/opt/safeinstall/proxy.py",
-                    "--host",
-                    "0.0.0.0",
-                    "--port",
-                    "3128",
-                    "--log",
-                    "/work/gateway.jsonl",
-                ],
-                entrypoint="python",
+                entrypoint="sh",
+                command=["-c", GATEWAY_COMMAND],
                 name=topology.gateway_name,
                 detach=True,
                 network="bridge",
-                volumes={str(run_dir): {"bind": "/work", "mode": "rw"}},
+                user=f"{os.getuid()}:{os.getgid()}" if hasattr(os, "getuid") else None,
+                read_only=True,
+                tmpfs={"/tmp": "rw,nosuid,nodev,size=16m"},
+                cap_drop=["ALL"],
+                security_opt=["no-new-privileges:true"],
+                mem_limit="256m",
+                pids_limit=128,
+                sysctls={"net.ipv4.ip_unprivileged_port_start": "0"},  # lets a non-root DNS sink bind :53
+                environment={"SAFEINSTALL_ALLOWLIST": allowlist_env(), "PYTHONDONTWRITEBYTECODE": "1"},
+                volumes={str(gateway_dir): {"bind": "/gateway-log", "mode": "rw"}},
             )
             network.connect(gateway)
             gateway.reload()
+            gateway_ip = gateway.attrs["NetworkSettings"]["Networks"][topology.internal_name]["IPAddress"]
             gateway_proxy_url = f"http://{topology.gateway_name}:3128"
             environment = gateway_environment(gateway_proxy_url)
 
             sandbox_kwargs = sandbox_container_kwargs(self.sandbox_image, limits)
-            sandbox_kwargs["read_only"] = True
             sandbox_kwargs["tmpfs"] = {
-                key: value
-                for key, value in sandbox_kwargs["tmpfs"].items()
-                if key != "/work"
+                key: value for key, value in sandbox_kwargs["tmpfs"].items() if key != "/work"
             }
             sandbox_kwargs["name"] = topology.sandbox_name
             sandbox_kwargs["detach"] = True
             sandbox_kwargs["network"] = topology.internal_name
+            sandbox_kwargs["dns"] = [gateway_ip]  # DNS lookups go to our logging sink
+            sandbox_kwargs["ulimits"] = [
+                docker.types.Ulimit(name="fsize", soft=512 * 1024 * 1024, hard=512 * 1024 * 1024)
+            ]
             sandbox_kwargs["environment"] = {
                 **environment,
+                **canary_env(canaries),
                 "SAFEINSTALL_PROXY_URL": gateway_proxy_url,
                 "SAFEINSTALL_TIMEOUT": str(limits.timeout_seconds),
             }
-            sandbox_kwargs["volumes"] = {str(run_dir): {"bind": "/work", "mode": "rw"}}
+            sandbox_kwargs["volumes"] = {str(sandbox_dir): {"bind": "/work", "mode": "rw"}}
 
             sandbox_target = target
-            host_target = Path(target).expanduser()
-            if host_target.exists():
-                source_dir = host_target.resolve()
+            if is_local_target(target):
+                host_target = Path(target).expanduser()
+                if not host_target.exists():
+                    raise FileNotFoundError(f"local target not found: {target}")
                 sandbox_target = "/src"
-                sandbox_kwargs["volumes"][str(source_dir)] = {
-                    "bind": "/src",
-                    "mode": "rw",
-                }
+                sandbox_kwargs["volumes"][str(host_target.resolve())] = {"bind": "/src", "mode": "ro"}
 
             sandbox_kwargs["command"] = [
-                "--timeout",
-                str(limits.timeout_seconds),
-                ecosystem,
-                sandbox_target,
+                "--timeout", str(limits.timeout_seconds), ecosystem, sandbox_target,
             ]
             if smoke_module:
                 sandbox_kwargs["command"].append(smoke_module)
@@ -215,8 +229,20 @@ class Orchestrator:
             if elapsed >= limits.timeout_seconds:
                 timed_out = timed_out or exit_code == 124
 
+            sandbox_log = b""
             try:
-                (run_dir / "sandbox.log").write_bytes(sandbox.logs())
+                sandbox_log = sandbox.logs()
+                (run_dir / "sandbox.log").write_bytes(sandbox_log)
+            except Exception:
+                pass
+            oom_killed = False
+            try:
+                sandbox.reload()
+                oom_killed = bool(sandbox.attrs.get("State", {}).get("OOMKilled"))
+            except Exception:
+                pass
+            try:
+                gateway.stop(timeout=2)  # let the gateway flush its last log lines
             except Exception:
                 pass
             try:
@@ -226,10 +252,32 @@ class Orchestrator:
 
             peak_mem = peak_mem_state["value"]
 
-            (run_dir / "fsdiff.txt").write_text(
-                self._docker_diff(sandbox),
-                encoding="utf-8",
+            # Sandbox-written files are copied symlink-safely; the gateway's log is moved into place.
+            safe_copy(sandbox_dir / "strace.log", run_dir / "strace.log")
+            gateway_log = gateway_dir / "gateway.jsonl"
+            if gateway_log.exists():
+                gateway_log.replace(run_dir / "gateway.jsonl")
+
+            log_text = sandbox_log.decode("utf-8", "replace")
+            if ecosystem == "pip":
+                report_text = pip_report_from_log(log_text)
+                if report_text:
+                    try:
+                        pinned, resolved_version = pinned_requirements(json.loads(report_text))
+                    except ValueError:
+                        pinned = None
+                    if pinned:
+                        (run_dir / "pinned-requirements.txt").write_text(pinned, encoding="utf-8")
+            records = orchestrator_events(
+                oom_killed=oom_killed, exit_code=exit_code, timed_out=timed_out,
+                tampered_decoys=decoy_tamper_paths(log_text),
+                timeout_seconds=limits.timeout_seconds, now=time.time(),
             )
+            (run_dir / "orchestrator-events.jsonl").write_text(
+                "".join(json.dumps(record) + "\n" for record in records), encoding="utf-8"
+            )
+
+            (run_dir / "fsdiff.txt").write_text(self._docker_diff(sandbox), encoding="utf-8")
         except Exception as exc:
             if timed_out:
                 raise
@@ -252,7 +300,7 @@ class Orchestrator:
             meta_path,
             {
                 "input": target,
-                "resolved_version": None,
+                "resolved_version": resolved_version,
                 "started_at": started_at,
                 "finished_at": datetime.now(timezone.utc).isoformat(),
                 "limits": {
